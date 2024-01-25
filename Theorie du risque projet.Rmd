@@ -1,0 +1,271 @@
+---
+title: "Création d'un modèle de charge de sinistre pour l'année 2024" 
+author: "Valentin&Guilhem"
+date: "2023-12-13"
+output: 
+  rmdformats::readthedown:
+    code_folding: "show"
+    number_sections : TRUE
+    highlight: tango
+---
+
+```{r}
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+data_1=read.csv("C:/Users/valen/Downloads/portefeuille_A.csv", header = TRUE)
+ptfA <- read.csv("C:/Users/valen/Downloads/portefeuille_A.csv", header = TRUE)
+ptfB <- read.csv("C:/Users/valen/Downloads/portefeuille_B.csv", header = TRUE)
+ptfC <- read.csv("C:/Users/valen/Downloads/portefeuille_C.csv", header = TRUE)
+ptfD <- read.csv("C:/Users/valen/Downloads/portefeuille_D.csv", header = TRUE)
+```
+# Importation des packages nécessaires pour la suite de l'étude
+```{r}
+library(tidyverse)
+library(pracma) #Whittaker_Anderson
+library(StMoMo) #projection de mortalité
+library(highcharter) #plot
+library(plotly) #surface plot
+library(WH)
+library(knitr)
+```
+# Importation des packages nécessaires pour la suite de l'étude
+
+
+```{r}
+# Afficher les premières lignes des données pour le portefeuille 1
+head(data_1)
+kable(head(ptfA))
+```
+
+Les jeux de données indiquent, pour chaque sinistre observé, le numéro (num) de la police correspondante, et le coût (cout) du sinistre correspondant.
+
+```{r}
+# Agrégation des données pour obtenir la fréquence de sinistre par police
+frequence_par_police <- table(data_1$num)
+
+# Création d'un data frame avec toutes les polices (de 1 à 100000)
+toutes_les_polices <- data.frame(num = 1:100000)
+
+# Fusionner avec le data frame frequence_par_police pour inclure les polices ayant 0 sinistre
+df_frequence_complet <- merge(toutes_les_polices, data.frame(num = as.integer(names(frequence_par_police)), frequence_sinistre = as.integer(frequence_par_police)), all.x = TRUE)
+
+# Remplacer les valeurs manquantes par 0
+df_frequence_complet[is.na(df_frequence_complet$frequence_sinistre), "frequence_sinistre"] <- 0
+
+# Assurez-vous que la colonne frequence_sinistre est numérique
+df_frequence_complet$frequence_sinistre <- as.numeric(df_frequence_complet$frequence_sinistre)
+
+# Analyse de la distribution empirique pour le portefeuille 1 avec échelle en valeurs entières
+hist(df_frequence_complet$frequence_sinistre, 
+     main = "Distribution des fréquences de sinistre - Portefeuille 1", 
+     xlab = "Fréquence de sinistre", 
+     col = "skyblue", 
+     border = "black",
+     breaks = seq(-0.5, max(df_frequence_complet$frequence_sinistre) + 0.5, 1))
+
+# Ajouter les axes avec des valeurs entières
+axis(1, at = seq(0, max(df_frequence_complet$frequence_sinistre), 1))
+
+# Ajouter l'axe des fréquences de sinistre
+axis(2)
+
+# Ajouter la légende pour l'axe des abscisses
+legend("topright", legend = "Fréquence de sinistre", col = "skyblue", bty = "n", pch = 15)
+
+
+```
+
+Cet histogramme ne permet de visualiser correctement les données de fréquence de sinistres par polices mais permet d'avoir une première vision de celle-ci. En effet le nombre de police avec un sinistre est prépondérant mais il existe quand même quelques polices avec 2 voire 3 sinistres. Au vu du portefeuille contenant 100000 polices, on constate qu'en
+La majorité des polices présentent un faible nombre de sinistres, avec un pic significatif autour de la valeur 1. En revanche, le nombre décroissant de polices avec deux ou trois sinistres suggère une diminution de la fréquence à mesure que le nombre de sinistres augmente. Cette analyse visuelle met en évidence la tendance globale vers des sinistres moins fréquents, mais une attention particulière peut être nécessaire pour comprendre les caractéristiques des polices avec des fréquences plus élevées.
+
+```{r}
+# Agrégation des données pour obtenir le nombre de polices ayant un certain nombre de sinistres
+table_nombre_polices <- table(df_frequence_complet$frequence_sinistre)
+
+# Conversion en data.frame
+df_nombre_polices <- data.frame(nombre_sinistres = as.integer(names(table_nombre_polices)),
+                                nombre_polices = as.integer(table_nombre_polices))
+
+# Afficher le tableau récapitulatif
+print(df_nombre_polices)
+```
+
+La distribution des données révèle une prédominance de polices avec un nombre limité de sinistres, notamment 90472 polices non sinistrées ainsi que 9059 polices avec un seul sinistre. Cette concentration suggère une stabilité globale du portefeuille. Toutefois, la présence de 448 polices avec deux sinistres et 21 polices avec trois sinistres indique une variabilité significative, nécessitant une exploration approfondie.
+
+
+```{r}
+# Agrégation des données pour obtenir la moyenne des coûts par police
+moyenne_cout_par_police <- tapply(data_1$cout, data_1$num, mean, na.rm = TRUE)
+
+# Conversion en data.frame
+df_moyenne_cout <- data.frame(num = as.integer(names(moyenne_cout_par_police)),
+                               cout_moyen = as.numeric(moyenne_cout_par_police))
+
+# Analyse de la distribution empirique des coûts moyens pour le portefeuille 1
+hist(df_moyenne_cout$cout_moyen, main = "Distribution des coûts de sinistre - Portefeuille 1", xlab = "Coût de sinistre", col = "lightcoral", border = "black")
+```
+
+
+```{r}
+# Boîte à moustaches des coûts moyens (boxplot)
+boxplot(df_moyenne_cout$cout_moyen, main = "Boîte à moustaches des coûts de sinistre - Portefeuille 1", ylab = "Coût moyen de sinistre", col = "lightgreen", border = "black")
+```
+
+```{r}
+# Résumé statistique des coûts moyens
+summary(df_moyenne_cout$cout_moyen)
+```
+La moyenne des coûts de sinistres est significativement plus élevée que la médiane, indiquant ainsi une asymétrie marquée dans la distribution. Cette disparité se manifeste clairement sur l'histogramme des coûts moyens de sinistres, mettant en évidence une concentration notable de valeurs élevées qui tirent la moyenne vers le haut par rapport à la médiane.
+
+
+```{r}
+# Importer la bibliothèque pour l'ajustement de la loi de Poisson
+library(MASS)
+
+# Ajuster la loi de Poisson aux données de fréquence de sinistre
+fit <- fitdistr(df_frequence_complet$frequence_sinistre, densfun = "Poisson")
+
+# Afficher les résultats de l'ajustement
+print(fit)
+
+# Tracer l'histogramme des fréquences de sinistre avec des breaks entiers
+hist(df_frequence_complet$frequence_sinistre, 
+     main = "Distribution des fréquences de sinistre - Ajustement de la loi de Poisson", 
+     xlab = "Fréquence de sinistre", 
+     col = "skyblue", 
+     border = "black",
+     breaks = seq(-0.5, max(df_frequence_complet$frequence_sinistre) + 0.5, 1),
+     xlim = c(-0.5, max(df_frequence_complet$frequence_sinistre) + 0.5))
+
+# Points pour la densité de probabilité ajustée avec la loi de Poisson
+x <- seq(0, max(df_frequence_complet$frequence_sinistre), by = 1)
+points(x, dpois(x, lambda = fit$estimate["lambda"])*100000, col = "red", pch = 16)
+
+# Ligne reliant les points de la densité de probabilité (plus visible)
+lines(x, dpois(x, lambda = fit$estimate["lambda"])*100000, col = "red", type = "l", lwd = 2)
+
+# Ajouter une légende
+legend("topright", legend = "Loi de Poisson ajustée", col = "red", lty = 1, lwd = 2)
+
+```
+
+
+Ajustement des données avec la loi de Poisson, tel que représenté dans le tableau ci-dessous, permet de comparer la distribution théorique de la fréquence de sinistres selon la loi de Poisson avec la distribution observée dans vos données.
+
+```{r}
+# Créer un dataframe pour la loi de Poisson ajustée
+poisson_df <- data.frame(fréquence = x,
+                         densité_probabilité = dpois(x, lambda = fit$estimate["lambda"]) * length(df_frequence_complet$frequence_sinistre))
+
+# Afficher le dataframe
+print(poisson_df)
+```
+
+
+
+```{r cars}
+# Créer un dataframe pour la loi de Poisson ajustée
+poisson_df <- data.frame(fréquence = x,
+                         densité_probabilité = dpois(x, lambda = fit$estimate["lambda"]))
+
+# Afficher le dataframe
+print(poisson_df)
+```
+```{r}
+# Tableau pour la loi de Poisson ajustée
+poisson_df <- data.frame(fréquence = x,
+                         densité_probabilité = dpois(x, lambda = fit$estimate["lambda"]))
+
+# Tableau pour les données observées
+table_nombre_polices <- table(df_frequence_complet$frequence_sinistre)
+df_nombre_polices <- data.frame(nombre_sinistres = as.integer(names(table_nombre_polices)),
+                                nombre_polices = as.integer(table_nombre_polices))
+
+# Afficher les deux tableaux
+print("Tableau pour la loi de Poisson ajustée:")
+print(poisson_df)
+
+print("Tableau pour les données observées:")
+print(df_nombre_polices)
+```
+```{r}
+# Importer la bibliothèque pour l'ajustement de la loi de Poisson
+library(MASS)
+library(ggplot2)
+
+# Ajuster la loi de Poisson aux données de fréquence de sinistre
+fit <- fitdistr(df_frequence_complet$frequence_sinistre, densfun = "Poisson")
+
+# Créer un dataframe pour les points et la ligne de la loi de Poisson
+df <- data.frame(x = seq(min(df_frequence_complet$frequence_sinistre), max(df_frequence_complet$frequence_sinistre), by = 1),
+                 y = dpois(seq(min(df_frequence_complet$frequence_sinistre), max(df_frequence_complet$frequence_sinistre), by = 1), 
+                           lambda = fit$estimate["lambda"])*100000)
+
+# Tracer l'histogramme des fréquences de sinistre avec ggplot2 et échelle logarithmique
+ggplot(df_frequence_complet, aes(x = frequence_sinistre)) +
+  geom_histogram(binwidth = 1, fill = "skyblue", color = "black", stat = "count") +
+  geom_point(data = df, aes(x, y), color = "red", size = 3) +
+  geom_line(data = df, aes(x, y), color = "red", size = 1.5) +
+  labs(title = "Distribution des fréquences de sinistre - Ajustement de la loi de Poisson",
+       x = "Fréquence de sinistre",
+       y = "Log(Nombre de polices)") +
+  scale_y_continuous(trans = 'log') +
+  theme_minimal()
+
+```
+
+```{r}
+```
+```{r}
+# Assurez-vous d'avoir ggplot2 installé
+# install.packages("ggplot2")
+
+# Chargez la bibliothèque ggplot2
+library(ggplot2)
+
+# Agrégation des données pour obtenir la moyenne des coûts par police
+moyenne_cout_par_police <- tapply(data_1$cout, data_1$num, mean, na.rm = TRUE)
+
+# Conversion en data.frame
+df_moyenne_cout <- data.frame(num = as.integer(names(moyenne_cout_par_police)),
+                               cout_moyen = as.numeric(moyenne_cout_par_police))
+
+# Création d'un graphique ggplot avec zoom sur la queue de distribution
+ggplot(df_moyenne_cout, aes(x = cout_moyen)) +
+  geom_histogram(binwidth = 25, fill = "lightcoral", color = "black") +
+  labs(title = "Distribution des coûts de sinistre - Portefeuille 1",
+       x = "Coût de sinistre moyen") +
+  theme_minimal()
+
+```
+```{r}
+# Assurez-vous d'avoir ggplot2 installé
+# install.packages("ggplot2")
+
+# Chargez la bibliothèque ggplot2
+library(ggplot2)
+
+# Agrégation des données pour obtenir la moyenne des coûts par police
+moyenne_cout_par_police <- tapply(data_1$cout, data_1$num, mean, na.rm = TRUE)
+
+# Conversion en data.frame
+df_moyenne_cout <- data.frame(num = as.integer(names(moyenne_cout_par_police)),
+                               cout_moyen = as.numeric(moyenne_cout_par_police))
+
+# Calcul des limites pour inclure les 10 % supérieurs
+limites_10pc <- quantile(df_moyenne_cout$cout_moyen, 0.99)
+
+# Création d'un graphique ggplot avec zoom sur les 10 % supérieurs
+ggplot(df_moyenne_cout, aes(x = cout_moyen)) +
+  geom_histogram(binwidth = max(df_moyenne_cout$cout_moyen)/50, fill = "lightcoral", color = "black") +
+  labs(title = "Distribution des coûts de sinistre - Portefeuille 1 - zoom sur les 1% de plus gros sinistres",
+       x = "Coût de sinistre moyen") +
+  theme_minimal() +
+  xlim(limites_10pc, max(df_moyenne_cout$cout_moyen)+100)
+
+```
+
