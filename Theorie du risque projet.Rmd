@@ -1,271 +1,2692 @@
 ---
-title: "Création d'un modèle de charge de sinistre pour l'année 2024" 
-author: "Valentin&Guilhem"
-date: "2023-12-13"
-output: 
+title: "Création d'un modèle de charge de sinistres pour l'année 2024" 
+author: "verades&gui4gui4"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:  
   rmdformats::readthedown:
-    code_folding: "show"
-    number_sections : TRUE
-    highlight: tango
+    code_folding: hide 
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: monochrome
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
-```{r}
+```{r,echo=FALSE}
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(warning = FALSE)
 ```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-data_1=read.csv("C:/Users/valen/Downloads/portefeuille_A.csv", header = TRUE)
-ptfA <- read.csv("C:/Users/valen/Downloads/portefeuille_A.csv", header = TRUE)
-ptfB <- read.csv("C:/Users/valen/Downloads/portefeuille_B.csv", header = TRUE)
-ptfC <- read.csv("C:/Users/valen/Downloads/portefeuille_C.csv", header = TRUE)
-ptfD <- read.csv("C:/Users/valen/Downloads/portefeuille_D.csv", header = TRUE)
-```
-# Importation des packages nécessaires pour la suite de l'étude
-```{r}
-library(tidyverse)
-library(pracma) #Whittaker_Anderson
-library(StMoMo) #projection de mortalité
-library(highcharter) #plot
-library(plotly) #surface plot
-library(WH)
-library(knitr)
-```
-# Importation des packages nécessaires pour la suite de l'étude
+# Lecture des données à partir des fichiers CSV et stockage dans des variables
+portA <- read.csv("http://irma.math.unistra.fr/~jberard/portefeuille_A.csv")  # Lecture des données du portefeuille A
+portB <- read.csv("http://irma.math.unistra.fr/~jberard/portefeuille_B.csv")  # Lecture des données du portefeuille B
+portC <- read.csv("http://irma.math.unistra.fr/~jberard/portefeuille_C.csv")  # Lecture des données du portefeuille C
+portD <- read.csv("http://irma.math.unistra.fr/~jberard/portefeuille_D.csv")  # Lecture des données du portefeuille D
 
-
-```{r}
-# Afficher les premières lignes des données pour le portefeuille 1
-head(data_1)
-kable(head(ptfA))
-```
-
-Les jeux de données indiquent, pour chaque sinistre observé, le numéro (num) de la police correspondante, et le coût (cout) du sinistre correspondant.
-
-```{r}
-# Agrégation des données pour obtenir la fréquence de sinistre par police
-frequence_par_police <- table(data_1$num)
-
-# Création d'un data frame avec toutes les polices (de 1 à 100000)
-toutes_les_polices <- data.frame(num = 1:100000)
-
-# Fusionner avec le data frame frequence_par_police pour inclure les polices ayant 0 sinistre
-df_frequence_complet <- merge(toutes_les_polices, data.frame(num = as.integer(names(frequence_par_police)), frequence_sinistre = as.integer(frequence_par_police)), all.x = TRUE)
-
-# Remplacer les valeurs manquantes par 0
-df_frequence_complet[is.na(df_frequence_complet$frequence_sinistre), "frequence_sinistre"] <- 0
-
-# Assurez-vous que la colonne frequence_sinistre est numérique
-df_frequence_complet$frequence_sinistre <- as.numeric(df_frequence_complet$frequence_sinistre)
-
-# Analyse de la distribution empirique pour le portefeuille 1 avec échelle en valeurs entières
-hist(df_frequence_complet$frequence_sinistre, 
-     main = "Distribution des fréquences de sinistre - Portefeuille 1", 
-     xlab = "Fréquence de sinistre", 
-     col = "skyblue", 
-     border = "black",
-     breaks = seq(-0.5, max(df_frequence_complet$frequence_sinistre) + 0.5, 1))
-
-# Ajouter les axes avec des valeurs entières
-axis(1, at = seq(0, max(df_frequence_complet$frequence_sinistre), 1))
-
-# Ajouter l'axe des fréquences de sinistre
-axis(2)
-
-# Ajouter la légende pour l'axe des abscisses
-legend("topright", legend = "Fréquence de sinistre", col = "skyblue", bty = "n", pch = 15)
-
-
-```
-
-Cet histogramme ne permet de visualiser correctement les données de fréquence de sinistres par polices mais permet d'avoir une première vision de celle-ci. En effet le nombre de police avec un sinistre est prépondérant mais il existe quand même quelques polices avec 2 voire 3 sinistres. Au vu du portefeuille contenant 100000 polices, on constate qu'en
-La majorité des polices présentent un faible nombre de sinistres, avec un pic significatif autour de la valeur 1. En revanche, le nombre décroissant de polices avec deux ou trois sinistres suggère une diminution de la fréquence à mesure que le nombre de sinistres augmente. Cette analyse visuelle met en évidence la tendance globale vers des sinistres moins fréquents, mais une attention particulière peut être nécessaire pour comprendre les caractéristiques des polices avec des fréquences plus élevées.
-
-```{r}
-# Agrégation des données pour obtenir le nombre de polices ayant un certain nombre de sinistres
-table_nombre_polices <- table(df_frequence_complet$frequence_sinistre)
-
-# Conversion en data.frame
-df_nombre_polices <- data.frame(nombre_sinistres = as.integer(names(table_nombre_polices)),
-                                nombre_polices = as.integer(table_nombre_polices))
-
-# Afficher le tableau récapitulatif
-print(df_nombre_polices)
-```
-
-La distribution des données révèle une prédominance de polices avec un nombre limité de sinistres, notamment 90472 polices non sinistrées ainsi que 9059 polices avec un seul sinistre. Cette concentration suggère une stabilité globale du portefeuille. Toutefois, la présence de 448 polices avec deux sinistres et 21 polices avec trois sinistres indique une variabilité significative, nécessitant une exploration approfondie.
-
-
-```{r}
-# Agrégation des données pour obtenir la moyenne des coûts par police
-moyenne_cout_par_police <- tapply(data_1$cout, data_1$num, mean, na.rm = TRUE)
-
-# Conversion en data.frame
-df_moyenne_cout <- data.frame(num = as.integer(names(moyenne_cout_par_police)),
-                               cout_moyen = as.numeric(moyenne_cout_par_police))
-
-# Analyse de la distribution empirique des coûts moyens pour le portefeuille 1
-hist(df_moyenne_cout$cout_moyen, main = "Distribution des coûts de sinistre - Portefeuille 1", xlab = "Coût de sinistre", col = "lightcoral", border = "black")
-```
-
-
-```{r}
-# Boîte à moustaches des coûts moyens (boxplot)
-boxplot(df_moyenne_cout$cout_moyen, main = "Boîte à moustaches des coûts de sinistre - Portefeuille 1", ylab = "Coût moyen de sinistre", col = "lightgreen", border = "black")
-```
-
-```{r}
-# Résumé statistique des coûts moyens
-summary(df_moyenne_cout$cout_moyen)
-```
-La moyenne des coûts de sinistres est significativement plus élevée que la médiane, indiquant ainsi une asymétrie marquée dans la distribution. Cette disparité se manifeste clairement sur l'histogramme des coûts moyens de sinistres, mettant en évidence une concentration notable de valeurs élevées qui tirent la moyenne vers le haut par rapport à la médiane.
-
-
-```{r}
-# Importer la bibliothèque pour l'ajustement de la loi de Poisson
-library(MASS)
-
-# Ajuster la loi de Poisson aux données de fréquence de sinistre
-fit <- fitdistr(df_frequence_complet$frequence_sinistre, densfun = "Poisson")
-
-# Afficher les résultats de l'ajustement
-print(fit)
-
-# Tracer l'histogramme des fréquences de sinistre avec des breaks entiers
-hist(df_frequence_complet$frequence_sinistre, 
-     main = "Distribution des fréquences de sinistre - Ajustement de la loi de Poisson", 
-     xlab = "Fréquence de sinistre", 
-     col = "skyblue", 
-     border = "black",
-     breaks = seq(-0.5, max(df_frequence_complet$frequence_sinistre) + 0.5, 1),
-     xlim = c(-0.5, max(df_frequence_complet$frequence_sinistre) + 0.5))
-
-# Points pour la densité de probabilité ajustée avec la loi de Poisson
-x <- seq(0, max(df_frequence_complet$frequence_sinistre), by = 1)
-points(x, dpois(x, lambda = fit$estimate["lambda"])*100000, col = "red", pch = 16)
-
-# Ligne reliant les points de la densité de probabilité (plus visible)
-lines(x, dpois(x, lambda = fit$estimate["lambda"])*100000, col = "red", type = "l", lwd = 2)
-
-# Ajouter une légende
-legend("topright", legend = "Loi de Poisson ajustée", col = "red", lty = 1, lwd = 2)
-
-```
-
-
-Ajustement des données avec la loi de Poisson, tel que représenté dans le tableau ci-dessous, permet de comparer la distribution théorique de la fréquence de sinistres selon la loi de Poisson avec la distribution observée dans vos données.
-
-```{r}
-# Créer un dataframe pour la loi de Poisson ajustée
-poisson_df <- data.frame(fréquence = x,
-                         densité_probabilité = dpois(x, lambda = fit$estimate["lambda"]) * length(df_frequence_complet$frequence_sinistre))
-
-# Afficher le dataframe
-print(poisson_df)
-```
-
-
-
-```{r cars}
-# Créer un dataframe pour la loi de Poisson ajustée
-poisson_df <- data.frame(fréquence = x,
-                         densité_probabilité = dpois(x, lambda = fit$estimate["lambda"]))
-
-# Afficher le dataframe
-print(poisson_df)
-```
-```{r}
-# Tableau pour la loi de Poisson ajustée
-poisson_df <- data.frame(fréquence = x,
-                         densité_probabilité = dpois(x, lambda = fit$estimate["lambda"]))
-
-# Tableau pour les données observées
-table_nombre_polices <- table(df_frequence_complet$frequence_sinistre)
-df_nombre_polices <- data.frame(nombre_sinistres = as.integer(names(table_nombre_polices)),
-                                nombre_polices = as.integer(table_nombre_polices))
-
-# Afficher les deux tableaux
-print("Tableau pour la loi de Poisson ajustée:")
-print(poisson_df)
-
-print("Tableau pour les données observées:")
-print(df_nombre_polices)
-```
-```{r}
-# Importer la bibliothèque pour l'ajustement de la loi de Poisson
-library(MASS)
-library(ggplot2)
-
-# Ajuster la loi de Poisson aux données de fréquence de sinistre
-fit <- fitdistr(df_frequence_complet$frequence_sinistre, densfun = "Poisson")
-
-# Créer un dataframe pour les points et la ligne de la loi de Poisson
-df <- data.frame(x = seq(min(df_frequence_complet$frequence_sinistre), max(df_frequence_complet$frequence_sinistre), by = 1),
-                 y = dpois(seq(min(df_frequence_complet$frequence_sinistre), max(df_frequence_complet$frequence_sinistre), by = 1), 
-                           lambda = fit$estimate["lambda"])*100000)
-
-# Tracer l'histogramme des fréquences de sinistre avec ggplot2 et échelle logarithmique
-ggplot(df_frequence_complet, aes(x = frequence_sinistre)) +
-  geom_histogram(binwidth = 1, fill = "skyblue", color = "black", stat = "count") +
-  geom_point(data = df, aes(x, y), color = "red", size = 3) +
-  geom_line(data = df, aes(x, y), color = "red", size = 1.5) +
-  labs(title = "Distribution des fréquences de sinistre - Ajustement de la loi de Poisson",
-       x = "Fréquence de sinistre",
-       y = "Log(Nombre de polices)") +
-  scale_y_continuous(trans = 'log') +
-  theme_minimal()
-
-```
-
-```{r}
-```
-```{r}
-# Assurez-vous d'avoir ggplot2 installé
-# install.packages("ggplot2")
-
-# Chargez la bibliothèque ggplot2
-library(ggplot2)
-
-# Agrégation des données pour obtenir la moyenne des coûts par police
-moyenne_cout_par_police <- tapply(data_1$cout, data_1$num, mean, na.rm = TRUE)
-
-# Conversion en data.frame
-df_moyenne_cout <- data.frame(num = as.integer(names(moyenne_cout_par_police)),
-                               cout_moyen = as.numeric(moyenne_cout_par_police))
-
-# Création d'un graphique ggplot avec zoom sur la queue de distribution
-ggplot(df_moyenne_cout, aes(x = cout_moyen)) +
-  geom_histogram(binwidth = 25, fill = "lightcoral", color = "black") +
-  labs(title = "Distribution des coûts de sinistre - Portefeuille 1",
-       x = "Coût de sinistre moyen") +
-  theme_minimal()
-
-```
-```{r}
-# Assurez-vous d'avoir ggplot2 installé
-# install.packages("ggplot2")
-
-# Chargez la bibliothèque ggplot2
-library(ggplot2)
-
-# Agrégation des données pour obtenir la moyenne des coûts par police
-moyenne_cout_par_police <- tapply(data_1$cout, data_1$num, mean, na.rm = TRUE)
-
-# Conversion en data.frame
-df_moyenne_cout <- data.frame(num = as.integer(names(moyenne_cout_par_police)),
-                               cout_moyen = as.numeric(moyenne_cout_par_police))
-
-# Calcul des limites pour inclure les 10 % supérieurs
-limites_10pc <- quantile(df_moyenne_cout$cout_moyen, 0.99)
-
-# Création d'un graphique ggplot avec zoom sur les 10 % supérieurs
-ggplot(df_moyenne_cout, aes(x = cout_moyen)) +
-  geom_histogram(binwidth = max(df_moyenne_cout$cout_moyen)/50, fill = "lightcoral", color = "black") +
-  labs(title = "Distribution des coûts de sinistre - Portefeuille 1 - zoom sur les 1% de plus gros sinistres",
-       x = "Coût de sinistre moyen") +
+# Définition d'une fonction pour personnaliser le thème des graphiques
+theme_actuariat <- function() {
+  # Utilisation du thème minimal de ggplot2 comme base
   theme_minimal() +
-  xlim(limites_10pc, max(df_moyenne_cout$cout_moyen)+100)
+    # Personnalisation des éléments du thème
+    theme(
+      # Lignes de la grille principale en gris clair en pointillés
+      panel.grid.major = element_line(color = "lightgray", linetype = "dashed"),
+      # Suppression des lignes de la grille secondaire
+      panel.grid.minor = element_blank(),
+      # Fond du panneau en blanc
+      panel.background = element_rect(fill = "white"),
+      # Lignes des axes en noir
+      axis.line = element_line(color = "black"),
+      # Position de la légende en bas
+      legend.position = "bottom",
+      # Style et taille du texte du titre du graphique
+      plot.title = element_text(size = 14, face = "bold"),
+      # Style et taille du texte des titres des axes
+      axis.title = element_text(size = 12),
+      # Style et taille du texte des graduations des axes
+      axis.text = element_text(size = 10),
+      # Style et taille du texte de la légende
+      legend.text = element_text(size = 10),
+      # Style et taille du titre de la légende
+      legend.title = element_text(size = 12),
+      # Style et taille du texte de la légende
+      plot.caption = element_text(size = 10, color = "gray")
+    )
+}
+
+# Définition d'une palette de couleurs pour les graphiques
+palette_actuariat <- c("#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC949")
 
 ```
+
+```{r}
+library(tidyverse) 
+library(plotly) 
+library(knitr) 
+library(dplyr)
+```
+
+# Introduction
+
+## Notations utilisées dans ce rapport
+
+-   "i.i.d." sera utilisé comme une abréviation de indépendants et
+    identiquement distribués
+
+-   Les ensembles de nombres seront représentés par leurs notations
+    caractéristiques. Par exemple, l'ensemble des entiers naturels sera
+    noté $\mathbb{N}$
+
+-   L'espérance mathématique sera notée $\mathbb{E}$, la covariance sera
+    notée $\mathbb{C}$, et la variance sera notée $\mathbb{V}$, afin
+    d'éviter toutes confusions entre variance et value-at-risk, notée
+    $VaR$
+
+-   La fonction de vraisemblance d'une variable aléatoire sera notée $L$
+
+-   Le seuil de significativité pour l'ensemble de nos test statistiques
+    sera de 0,05. Si la p-value d'un test statistique est inférieure à
+    ce seuil, nous rejetterons l'hypothèse nulle, sinon nous la
+    conserverons
+
+## Présentation des données
+
+Les quatre jeux de données mis à notre disposition sont des bases de
+données relatives à des portefeuilles d'assurance. Ils contiennent, pour
+chaque sinistre observé, le numéro (num) de la police correspondante, et
+le coût (cout) du sinistre correspondant. Il faut noter que chaque
+portefeuille est composé de 100 000 polices d'assurance, et qu'il n'y a
+ni entrée ni sortie au cours du temps. Voici les 6 premières lignes du
+jeu de données relatif au portefeuille A :
+
+```{r}
+# Nombre d'échantillons pour la méthode bootstrap
+N <- 15000
+
+# Affichage des premières lignes du dataframe portA sous forme de tableau
+kable(head(portA))
+# Création d'une liste contenant les quatre portefeuilles portA, portB, portC et portD
+portefeuille <- list(portA, portB, portC, portD)
+# Nombre de polices d'assurance à simuler
+nb_police <- 100000  # nb_police est défini à 100000
+```
+
+```{r,include=FALSE}
+kable(head(portB))
+kable(head(portC))
+kable(head(portD))
+```
+
+L'objectif de notre étude sera de proposer une modélisation de la charge
+sinistres pour quatre portefeuilles d'assurés. La finalité est d'obtenir
+les indicateurs suivants pour l'année suivante : espérance, variance et
+$VaR_{1\%}$ pour chaque portefeuille, ainsi que des méthodes que l'on
+peut envisager pour prédire l'ensemble de la charge pour l'année
+suivante. Dans un premier temps, nous allons détailler les risques
+auxquels nous faisons face lorsqu'on débute une telle étude :
+
+-   Le risque de dérive structurelle, c'est-à-dire une dérive du coût
+    moyen des sinistres avec l'inflation, par exemple.
+
+-   Le risque de modèle, associé à la validité et à l'adéquation du
+    modèle utilisé pour la modélisation de la charge sinistres.
+
+-   Le risque de base, lié à la disponibilité de données représentatives
+    de notre portefeuille.
+
+-   Le risque de sélection adverse, qui survient lorsque la composition
+    du portefeuille n'est pas représentative de la population assurée
+    dans son ensemble.
+
+**Modélisation en segmentant les années :**
+
+Le premier avantage de cette méthode de modélisation est qu'elle permet
+de permet de capturer les variations saisonnières ou cycliques dans les
+sinistres. De plus,elle peut fournir une meilleure compréhension des
+tendances et des patterns de sinistralité au fil du temps. Enfine, elle
+est utile si certaines années ont des caractéristiques spécifiques (par
+exemple, des événements catastrophiques) qui nécessitent une analyse
+distincte.
+
+Néanmoins, cette méthode nécessite suffisamment de données fiables pour
+chaque année, et elle est plus complexe à mettre en œuvre et à
+interpréter que la modélisation globale.
+
+**Modélisation en prenant en compte le portefeuille dans sa globalité
+:**
+
+Un des avantages de cette méthode est qu'elle simplifie le processus
+d'analyse en agrégeant toutes les données sur le portefeuille. Elle peut
+également être adéquate si les variations entre les années sont
+relativement faibles ou si la précision au niveau annuel n'est pas
+cruciale. Elle est enfin plus facile à mettre en œuvre lorsque les
+données historiques sont limitées ou moins fiables.
+
+Cependant, elle présente un risque de ne pas capturer efficacement les
+variations saisonnières ou cycliques dans les sinistres, et de perdre
+des informations importantes sur les tendances spécifiques à certaines
+années.
+
+Au vu de cela, une modélisation annuelle semble déjà plus intéressante
+car elle permet plus de flexibilité et plus de détails dans l'analyse,
+et au vu des objectifs (donner des indicateurs annuels), la modélisation
+annuelle semble déjà être une option plus intéressante, sauf si l'on
+constate qu'il n'y a pas de tendance ni de caractéristiques spécifiques
+dans les données de chaque année.
+
+## Retraitement des données
+
+Une première étape consiste à reconstituer le portefeuille en associant
+à chaque police son nombre de sinistre par an.
+
+Dans un second temps, nous enlèverons la ligne du portefeuille D qui n'a
+pas de valeur pour l'année.
+
+```{r}
+resultat1=data.frame()
+traitement_portefeuille=function(portefeuille){
+  toutes_les_polices = data.frame(num_police=rep((1:100000),5),annee=rep(2019:2023, each = 100000))
+portefeuille$annee=as.integer(portefeuille$annee)
+portefeuilleV1= portefeuille %>%
+  group_by(annee, num_police) %>%
+  summarise(
+    nombre_sinistres = n(),
+    cout_total = sum(cout),
+    .groups = 'drop'
+  )
+result <- left_join(toutes_les_polices, portefeuilleV1, by =c("num_police","annee"))
+result <- result %>%
+  mutate(
+    nombre_sinistres = coalesce(nombre_sinistres, 0),
+    cout_total = coalesce(cout_total, 0)
+  )
+  return(result)
+}
+d=traitement_portefeuille(portD)
+c=traitement_portefeuille(portC)
+b=traitement_portefeuille(portB)
+a=traitement_portefeuille(portA)
+
+a_resume=a%>%group_by(annee)%>%summarise(Moyenne=mean(nombre_sinistres),Variance=var(nombre_sinistres),Somme= sum(nombre_sinistres))%>%mutate(croissance_moyenne=Moyenne/lag(Moyenne))
+# estimer avec une croissance de la sinistralité, combien, cela reste à définir 
+b_resume=b%>%group_by(annee)%>%summarise(Moyenne=mean(nombre_sinistres),Variance=var(nombre_sinistres),Somme= sum(nombre_sinistres))%>%mutate(croissance_moyenne=Moyenne/lag(Moyenne))
+#sinistralité constante avec les année, pas de soucis
+c_resume=c%>%group_by(annee)%>%summarise(Moyenne=mean(nombre_sinistres),Variance=var(nombre_sinistres),Somme= sum(nombre_sinistres))%>%mutate(croissance_moyenne=Moyenne/lag(Moyenne))
+#année atypique, enlevé cette année, impossible d'avoir si peut de sinistralité 
+#ou alors refléter cette variation du paramètres 
+d_resume=d%>%group_by(annee)%>%summarise(Moyenne=mean(nombre_sinistres),Variance=var(nombre_sinistres),Somme= sum(nombre_sinistres))%>%mutate(croissance_moyenne=Moyenne/lag(Moyenne))
+
+
+# Combinaison des données résumées de chaque portefeuille en ajoutant une colonne "Portefeuille"
+combined_data <- bind_rows(
+  mutate(a_resume, Portefeuille = "Portefeuille A"),
+  mutate(b_resume, Portefeuille = "Portefeuille B"),
+  mutate(c_resume, Portefeuille = "Portefeuille C"),
+  mutate(d_resume, Portefeuille = "Portefeuille D")
+)
+
+# Résumé des statistiques (moyenne, variance, somme) pour chaque portefeuille
+a_resume_1 <- a %>% summarise(Moyenne = mean(nombre_sinistres),
+                              Variance = var(nombre_sinistres),
+                              Somme = sum(nombre_sinistres))
+b_resume_1 <- b %>% summarise(Moyenne = mean(nombre_sinistres),
+                              Variance = var(nombre_sinistres),
+                              Somme = sum(nombre_sinistres))
+c_resume_1 <- c %>% summarise(Moyenne = mean(nombre_sinistres),
+                              Variance = var(nombre_sinistres),
+                              Somme = sum(nombre_sinistres))
+d_resume_1 <- d %>% summarise(Moyenne = mean(nombre_sinistres),
+                              Variance = var(nombre_sinistres),
+                              Somme = sum(nombre_sinistres))
+
+# Combinaison des données résumées de chaque portefeuille avec une colonne "Portefeuille"
+combined_data_all <- bind_rows(
+  mutate(a_resume_1, Portefeuille = "Portefeuille A"),
+  mutate(b_resume_1, Portefeuille = "Portefeuille B"),
+  mutate(c_resume_1, Portefeuille = "Portefeuille C"),
+  mutate(d_resume_1, Portefeuille = "Portefeuille D")
+)
+
+portD<-portD %>% filter(!is.na(annee))
+```
+
+# Analyse de la fréquence des sinistres
+
+Nous débutons notre analyse en examinant la distribution empirique des
+fréquences de sinistres pour chacun des portefeuilles. Cette étude nous
+permettra de mieux comprendre la répartition des sinistres au sein de
+chaque portefeuille et d'identifier d'éventuelles tendances ou
+caractéristiques distinctives. Nous commencerons par analyser la
+distribution des sinistres sans prendre en compte les années de
+sinistralité. Ensuite, nous nous intéresserons à l'évolution temporelle
+de la fréquence des sinistres pour chaque portefeuille.
+
+## Visualisation sans distinction d'année
+
+Afin de mieux appréhender le portefeuille dans son ensemble, nous
+pouvons commencer par extraire quelques statistiques sur les différents
+portefeuilles.
+
+```{r}
+kable(combined_data_all)
+```
+
+Les portefeuilles présentent des caractéristiques très similaires
+lorsque l'on considère la sinistralité au cours des cinq dernières
+années. Le fait que leurs variances soient égales à leurs espérances
+suggère la possibilité d'une modélisation de la fréquence des sinistres
+de chaque portefeuille à l'aide d'une distribution de Poisson, en
+prenant en compte la sinistralité globale sur cette période. Une telle
+approche permettrait de lisser les variations potentielles annuelles sur
+chaque portefeuille.
+
+Ainsi, après ces premières observations, il semble plausible de
+modéliser chaque portefeuille de manière similaire.
+
+```{r}
+# Crée une copie de la dataframe combined_data dans combined_data_1
+combined_data_1 = combined_data
+
+# Transforme la variable "annee" en facteur, en ordonnant les niveaux par ordre croissant de fréquence
+# Cela signifie que les années seront triées par ordre décroissant de fréquence dans le graphique
+combined_data_1$annee <- factor(combined_data$annee, order = TRUE, levels = unique(combined_data$annee))
+
+
+gg=ggplot(combined_data_1, aes(x = Portefeuille, y = Somme, fill = annee)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = mean(combined_data_all$Somme), linetype = "dashed", color = "red") + 
+   annotate("text", x = Inf, y = mean(combined_data_all$Somme), 
+           label = "Moyenne générale", 
+           vjust = 1, hjust = 1, 
+           color = "red", 
+           fontface = "italic",
+           size = 3) +
+  labs(title = "Total des sinistres par portefeuille",
+       x = "Portefeuille",
+       y = "Total des sinistres") +
+  scale_fill_manual(values = palette_actuariat)+
+  theme_actuariat()
+
+
+ggplotly(gg)
+```
+
+Une première analyse nous permet de constater que le nombre de sinistres
+par portefeuille est très similaire pour tous les portefeuilles. Ce
+nombre est proche de 25 000, ce que l'on distingue sur la ligne en
+pointillé rouge sur le graphique ci-dessus. Cependant, il semble déjà
+apparaître une distinction en fonction des années pour plusieurs
+portefeuilles.
+
+## Visualisation avec distinction annuelle
+
+```{r}
+# Combinaison des données des portefeuilles :
+combined_data_all_portefeuille <- bind_rows(
+  mutate(a, Portefeuille = "Portefeuille A"),  # Ajoute une colonne 'Portefeuille' avec la valeur 'Portefeuille A' aux données du portefeuille A
+  mutate(b, Portefeuille = "Portefeuille B"),  # Ajoute une colonne 'Portefeuille' avec la valeur 'Portefeuille B' aux données du portefeuille B
+  mutate(c, Portefeuille = "Portefeuille C"),  # Ajoute une colonne 'Portefeuille' avec la valeur 'Portefeuille C' aux données du portefeuille C
+  mutate(d, Portefeuille = "Portefeuille D")   # Ajoute une colonne 'Portefeuille' avec la valeur 'Portefeuille D' aux données du portefeuille D
+)
+
+# Calcul de la distribution des sinistres :
+distribution <- combined_data_all_portefeuille %>%
+  group_by(annee, Portefeuille, nombre_sinistres) %>%  # Groupement des données par année, portefeuille et nombre de sinistres
+  count(nombre_sinistres)  # Comptage du nombre d'occurrences de chaque nombre de sinistres dans chaque groupe
+
+
+gg2=ggplot(distribution, aes(x = as.factor(annee), y = n, fill = as.factor(nombre_sinistres))) +
+  geom_bar(stat = "identity", position = "dodge", color = "white", alpha = 0.7) +
+  labs(title = "Distribution du Nombre de Sinistres",
+       x = "Année",
+       y = "Nombre de Police (Échelle Logarithmique)",
+       fill = "Nombre de sinistres") +
+  facet_wrap(~ Portefeuille, scales = "free_y", ncol = 2) +
+  scale_fill_manual(values = palette_actuariat) +  
+  theme_actuariat()+
+  scale_y_log10()
+
+ggplotly(gg2)
+```
+
+Les histogrammes actuels ne permettent pas une visualisation approfondie
+des données de fréquence de sinistres par polices, mais ils offrent une
+première impression de celles-ci.
+
+La distribution des données révèle une prédominance des polices avec un
+nombre limité de sinistres. Cette première visualisation nous permet
+également de constater qu'il ne semble pas y avoir de police avec un
+nombre aberrant de sinistres, comme cela peut parfois être observé. Cela
+confirme un premier critère en faveur de l'utilisation d'une loi de
+Poisson pour modéliser la fréquence des sinistres. Nous n'aurons pas
+besoin d'autres lois pour modéliser d'éventuelles valeurs plus extrêmes.
+
+```{r}
+gg3=ggplot(combined_data, aes(x = annee, y = Somme, color = Portefeuille)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ Portefeuille, scales = "free_y", ncol = 2) +
+  labs(title = "Évolution du nombre de sinistres par an",
+       x = "Année",
+       y = "Nombre de sinistres") +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat()
+
+ggplotly(gg3)
+```
+
+### Portefeuille A {.unnumbered}
+
+Le nombre de sinistres semble peu volatile, avec deux années légèrement
+moins sinistrées (2020-2021). Il est donc suggéré de modéliser le nombre
+de sinistres pour 2024 en utilisant une loi de Poisson basée sur
+l'ensemble du portefeuille.
+
+### Portefeuille B {.unnumbered}
+
+La situation est similaire à celle du portefeuille A, avec une année
+légèrement moins sinistrée (2020). Aucune anomalie majeure n'est
+identifiée. Le portefeuille peut être modélisé en prenant en compte
+toutes les données disponibles, sans exclusion particulière.
+
+### Portefeuille C {.unnumbered}
+
+Le portefeuille présente une complexité accrue, avec une année nettement
+moins sinistrée (2021) et une stabilité apparente sur les quatre autres
+années. Deux approches sont envisageables pour lamodélisation. La
+première consiste à effectuer un tirage aléatoire entre les cinq années
+pour estimer les paramètres de la loi de Poisson. Une autre approche
+pourrait exclure l'année 2021 comme exceptionnelle. Une analyse plus
+approfondie est nécessaire pour potentiellement identifier des liens
+avec les coûts de sinistres. Cependant, l'exclusion de l'année 2021 doit
+être justifiée techniquement, et une compréhension du produit
+d'assurance est recommandée pour expliquer la baisse significative en
+2021.
+
+### Portefeuille D {.unnumbered}
+
+Le nombre de sinistres semble croître depuis 2019, mais la croissance
+diminue progressivement. Il est recommandé de refléter cette tendance
+dans la modélisation en prenant en compte la croissance décroissante du
+nombre de sinistres depuis 2019. Une analyse plus détaillée pourrait
+être nécessaire pour ajuster la modélisation en fonction des facteurs
+sous-jacents.
+
+En résumé, chaque portefeuille nécessite une approche spécifique en
+termes de modélisation. L'utilisation de lois de probabilité, notamment
+la loi de Poisson, est suggérée, mais une analyse plus approfondie, y
+compris la justification des choix de modélisation, est essentielle pour
+garantir la précision et la fiabilité des résultats. De plus, des
+recherches supplémentaires sur les produits d'assurance et les facteurs
+de sinistralité spécifiques à chaque portefeuille peuvent apporter des
+éclaircissements utiles.
+
+```{r,include=FALSE}
+ggplot(combined_data_1, aes(x = Portefeuille, y = Somme, fill = annee)) +
+  geom_bar(stat = "identity",position='dodge') +
+  labs(title = "Total des sinistres par portefeuille",
+       x = "Portefeuille",
+       y = "Total des sinistres") +
+  scale_fill_manual(values = palette_actuariat) +
+  theme_actuariat()
+```
+
+```{r}
+gg3=ggplot(combined_data, aes(x = annee, color = Portefeuille)) +
+  geom_line(aes(y = Moyenne, linetype = "Moyenne"), size = .5, show.legend = TRUE) +
+  geom_line(aes(y = Variance, linetype = "Variance"), size = .5, show.legend = TRUE) +
+  geom_point(aes(y = Moyenne, shape = "Moyenne"), show.legend = TRUE) +
+  geom_point(aes(y = Variance, shape = "Variance"), show.legend = TRUE) +
+  scale_color_manual(values = palette_actuariat) +
+  scale_linetype_manual(values = c("Moyenne" = "solid", "Variance" = "dashed")) +
+  scale_shape_manual(values = c("Moyenne" = 16, "Variance" = 1)) +
+  facet_wrap(~ Portefeuille, scales = "free_y", ncol = 2) +
+  labs(title = "Évolution des moyennes et variances",
+       x = "Année",
+       y = "Valeur") +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat() +
+  theme(legend.position = "top")
+
+ggplotly(gg3)
+```
+
+Les moments de chaque distribution semblent être fortement corrélés,
+avec des valeurs identiques pour la moyenne et la variance de chaque
+portefeuille. Cela suggère la possibilité d'une modélisation appropriée
+avec une loi de Poisson pour chaque portefeuille. Cependant, il est
+important de noter que les portefeuilles A et B présentent une variance
+légèrement plus éloignée de la moyenne par rapport aux autres
+portefeuilles.
+
+Le portefeuille C présente des caractéristiques surprenantes, en effet
+la variance est égale presque certainement à l'espérance pour chaque
+année.
+
+Il serait judicieux d'envisager des solutions pour refléter ces
+caractéristiques spécifiques. Par exemple, l'utilisation d'une
+distribution de Poisson avec une composante de surdispersion pourrait
+être explorée pour les portefeuilles A et B. La surdispersion
+permettrait de prendre en compte une variance plus importante que celle
+attendue dans une distribution de Poisson classique, ce qui
+correspondrait davantage à l'écart observé entre la moyenne et la
+variance pour ces deux portefeuilles.
+
+Cette approche plus nuancée pourrait mieux capturer la variabilité des
+sinistres dans les portefeuilles A et B, tout en maintenant la cohérence
+avec la distribution de Poisson pour les autres portefeuilles. Une
+analyse approfondie des données et une modélisation plus avancée
+pourraient permettre d'affiner cette proposition et de mieux représenter
+les caractéristiques spécifiques de chaque portefeuille.
+
+# Modélisation de la fréquence de sinistralité
+
+## Choix de la loi qui modélisera la fréquence
+
+Avant d'entamer la modélisation, il est essentiel de prendre en
+considération notre analyse antérieure. La loi de Poisson, par
+définition, établit une égalité entre son espérance et sa variance.
+C'est donc logiquement que nous optons pour cette loi afin de modéliser
+nos distributions sur l'ensemble de la période étudiée et nos
+distribution annuelles.
+
+La question qui subsiste est celle de la valeur du paramètre de cette
+loi qui va modéliser le portefeuille, que nous allons estimer en
+utilisant le maximum de vraisemblance.
+
+## Estimation du paramètre pour une loi Poisson
+
+La fonction de vraisemblance $L(\lambda; x_1, x_2, ..., x_n)$ pour un
+échantillon de variables aléatoires indépendantes et identiquement
+distribuées selon une loi de Poisson est donnée par :
+$$ L(\lambda; x) = \prod_{i=1}^{n} \frac{e^{-\lambda} \lambda^{x_i}}{x_i!} $$
+
+Le log-vraisemblance est la somme des logarithmes de cette fonction :
+$$ \ln L(\lambda; x) = \sum_{i=1}^{n} \left( -\lambda + x_i \ln(\lambda) - \ln(x_i!) \right) $$
+
+La dérivée du log-vraisemblance par rapport à $\lambda$ est :
+$$ \frac{d}{d\lambda} \ln L(\lambda; x) = \sum_{i=1}^{n} \left( -1 + \frac{x_i}{\lambda} \right) $$
+
+En égalant cette dérivée à zéro, nous obtenons l'équation pour
+l'estimateur du maximum de vraisemblance :
+$$ \sum_{i=1}^{n} x_i = n\lambda $$
+
+En résolvant cette équation $\lambda$, nous obtenons :
+$$ \hat{\lambda}_{EML} = \frac{1}{n} \sum_{i=1}^{n} x_i =\bar{X}$$
+
+Cela signifie que l'estimateur du maximum de vraisemblance de $\lambda$
+pour une distribution de Poisson est simplement la moyenne empirique des
+observations.
+
+Nous avons donc un estimateur de $\lambda$ qui est la moyenne empirique
+de l'échantillon.
+
+## Choix de modélisation : influence des moyennes
+
+La modélisation avec une loi de Poisson nous impose donc de prendre en
+compte la moyenne des échantillons, car c'est ce moment qui permet de
+caractériser la loi qui modélise la fréquence des sinistres. Nous
+effectuerons donc des tests de Student pour vérifier si les moyennes des
+échantillons diffèrent de manière significative en fonction des années :
+
+```{r}
+# Initialiser un vecteur pour stocker les p-values
+p_values_A <- numeric()
+p_values_B <- numeric()
+p_values_C <- numeric()
+p_values_D <- numeric()
+
+for (annees in 2019:2023) {
+  echantillon_A <- a %>% filter(annee == annees)
+  echantillon_B <- b %>% filter(annee == annees)
+  echantillon_C <- c %>% filter(annee == annees)
+  echantillon_D <- d %>% filter(annee == annees)
+  
+  resultat_test_A <- t.test(echantillon_A$nombre_sinistre, mu = mean(a$nombre_sinistre))
+  resultat_test_B <- t.test(echantillon_B$nombre_sinistre, mu = mean(b$nombre_sinistre))
+  resultat_test_C <- t.test(echantillon_C$nombre_sinistre, mu = mean(c$nombre_sinistre))
+  resultat_test_D <- t.test(echantillon_D$nombre_sinistre, mu = mean(d$nombre_sinistre))
+  
+  p_values_A <- c(p_values_A, resultat_test_A$p.value)
+  p_values_B <- c(p_values_B, resultat_test_B$p.value)
+  p_values_C <- c(p_values_C, resultat_test_C$p.value)
+  p_values_D <- c(p_values_D, resultat_test_D$p.value)
+}
+
+# Créer un tableau avec les années et les p-values pour chaque portefeuille
+resultats_tableau <- data.frame(Annee = 2019:2023, P_Value_A = p_values_A, P_Value_B = p_values_B, P_Value_C = p_values_C, P_Value_D = p_values_D)
+
+# Afficher le tableau
+kable(resultats_tableau)
+```
+
+Ces tests confirment l'importance de prendre en compte la dimension
+temporelle de l'évolution de la sinistralité et les variations
+spécifiques à chaque portefeuille.
+
+Les p-values élevées suggèrent que la moyenne du nombre de sinistres par
+police au cours des 5 années est proche du nombre de sinistres par
+police de l'année considérée.
+
+Les portefeuilles A et B présentent une moyenne relativement constante
+au fil des années, avec de légères variations pouvant être attribuées au
+hasard d'une année à l'autre.
+
+Le portefeuille C ne présente pas une moyenne constante au fil des
+années.
+
+Enfin, le portefeuille D présente des variations annuelles en raison de
+la tendance à l'augmentation de la sinistralité observée.
+
+En conclusion, l'analyse des p-values confirme la stabilité temporelle
+des portefeuilles A et B, les variations significatives du portefeuille
+C, et la tendance à l'augmentation des sinistres pour le portefeuille D.
+Ces observations seront cruciales pour déterminer les paramètres de la
+loi de Poisson lors de la modélisation de chaque portefeuille.
+
+## Modélisation des tendances des portefeuilles
+
+Nous pouvons faire une première analyse des tendances à l'aide d'une
+régression :
+
+```{r}
+gg4=ggplot(combined_data, aes(x = annee, y = Somme, color = Portefeuille)) +
+  geom_line() +
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue",size=0.5, span = 30,se=FALSE) +
+  facet_wrap(~ Portefeuille, scales = "free_y", ncol = 2) +
+  labs(title = "Évolution du nombre de sinistre",
+       x = "Année",
+       y = "Nombre de sinistres") +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat()
+
+ggplotly(gg4)
+```
+
+Le modèle semble plutôt bien s'ajuster sur le portefeuille D. Nous
+pourrons utiliser ce type de méthode pour estimer le paramètre de la loi
+poisson pour ce portefeuille.
+
+Pour les autres portefeuille aucune tendance n'apparait. Nous
+utiliserons pour les portefeuilles A et B toutes les années afin de
+simuler une valeur du paramètres de la loi poisson, en utilisant la
+méthode bootstrap pour obtenir un intervalle de confiance des
+paramètres.
+
+Pour le portefeuille C , nous considèrerons l'année 2021 comme
+exceptionnelle. En conséquence, nous ne tiendrons pas compte de cette
+année là.
+
+## Méthode pour simuler le portefeuille A et B {.unnumbered}
+
+Nous devons dans un premier temps estimer le paramètres de la loi de
+Poisson que nous allons utiliser. Nous nous réfèrerons à la méthode
+expliquée ci-dessus.
+
+```{r}
+# Fonction pour effectuer le bootstrap :
+bootstrap_1 <- function(x, n_bootstrap = N) {
+  # Initialisation des vecteurs pour stocker les échantillons bootstrap et les estimations bootstrap :
+  lambda_bootstrap <- numeric(n_bootstrap)
+  somme_bootstrap <- numeric(n_bootstrap)
+  
+  # Boucle pour générer les échantillons bootstrap et calculer les estimations bootstrap :
+  for (i in 1:n_bootstrap) {
+    bootstrap_sample <- sample(x, replace = TRUE)  # Échantillonnage avec remplacement
+    parameters <- mean(bootstrap_sample)  # Calcul de la moyenne de l'échantillon bootstrap
+    lambda_bootstrap[i] <- parameters  # Stockage de la moyenne bootstrap
+    somme_bootstrap[i] <- sum(rpois(100000, lambda_bootstrap[i]))  # Estimation du nombre de sinistres à partir de la moyenne bootstrap
+  }
+  
+  # Calcul des intervalles de confiance pour la moyenne et le nombre de sinistres :
+  lambda_ci <- quantile(lambda_bootstrap, c(0.025, 0.975))  # Intervalle de confiance pour la moyenne bootstrap
+  somme_ci <- quantile(somme_bootstrap, c(0.025, 0.975))  # Intervalle de confiance pour le nombre de sinistres bootstrap
+  
+  # Retourne les intervalles de confiance pour la moyenne et le nombre de sinistres :
+  return(list(lambda=lambda_ci, nb_sinitre=somme_ci))
+}
+
+# Application de la fonction de bootstrap aux données des portefeuilles A et B :
+resultats_bootstrap_a <- bootstrap_1(a$nombre_sinistres)  # Bootstrap pour le portefeuille A
+resultats_bootstrap_b <- bootstrap_1(b$nombre_sinistres)  # Bootstrap pour le portefeuille B
+
+# Calcul de la largeur relative des intervalles de confiance pour la moyenne des sinistres :
+width_a <- diff(resultats_bootstrap_a[[1]]) / mean(a$nombre_sinistres) * 100  # Largeur relative de l'intervalle de confiance pour le portefeuille A
+width_b <- diff(resultats_bootstrap_b[[1]]) / mean(b$nombre_sinistres) * 100  # Largeur relative de l'intervalle de confiance pour le portefeuille B
+
+```
+
+Nous calculons également, avec la méthode bootstrap, les indicateurs qui
+pourront nous indiquer avec quelle confiance nous pouvons considérer nos
+résultats. Nous proposons de réechantilloner la distribution, de
+calculer le paramètre pour ce nouvelle échantillon et de faire une
+simulation avec ce paramètre afin d'obtenir 1 000 scénarios possibles et
+obtenir un intervalle de prédiction fiable à 95 %.
+
+```{r}
+# Simulation de 5 ensembles de données
+simulations <- lapply(1:5, function(i) {
+  data.frame(annee = seq(2023, 2033, by = 1),
+             Somme = replicate(11, sum(rpois(100000, mean(a$nombre_sinistres)))))
+})
+
+# Création de la base avec les simulations
+base <- bind_rows(lapply(1:5, function(i) {
+  simulations[[i]] %>%
+    mutate(origine = paste("Simulation", i))
+}))
+
+base <- base %>%
+  full_join(a_resume, by = c("annee" = "annee", "Somme" = "Somme")) %>%
+  replace_na(list(origine = "Portefeuille A"))
+
+base <- base %>%
+  left_join(a_resume %>% 
+              filter(annee == 2023) %>% 
+              select(annee, Somme), 
+            by = "annee", 
+            suffix = c("", "_a_resume")) %>%
+  mutate(Somme = coalesce(Somme_a_resume, Somme)) %>%
+  select(-Somme_a_resume)
+
+gg5=ggplot(base, aes(x = annee, y = Somme, color = origine, linetype = origine)) +
+  geom_line(size = .5) +
+  scale_linetype_manual(values = c("Portefeuille A" = "solid", "Simulation 1" = "dashed",
+                                   "Simulation 2" = "dashed", "Simulation 3" = "dashed",
+                                   "Simulation 4" = "dashed", "Simulation 5" = "dashed")) +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat()+
+  labs(title = "Historique et simulation pour le portefeuille A",
+       x = "Année",
+       y = "Nombre de sinistres")+
+  coord_cartesian(ylim = c(4800, 5250))+
+  geom_hline(yintercept = resultats_bootstrap_a[[2]][2], linetype = "solid", color = "red")+
+  geom_hline(yintercept = resultats_bootstrap_a[[2]][1], linetype = "solid", color = "red")
+
+ggplotly(gg5)
+```
+
+Graphiquement, la modélisation du comportement du nombre de sinistres
+pour le portefeuille A de cette manière ne semble pas aberrante.
+
+Afin de confirmer nos hypothèses, nous pouvons effectuer un test en
+ajustant l'effectif à une loi de Poisson en utilisant les données
+annuelles du nombre de sinistres pour ce portefeuille.
+
+Les lignes rouges correspondent à un intervalle de prédiction à 95 % du
+nombre sinistre par an selon la méthode bootstrap.
+
+```{r}
+set.seed(16)
+# Simulation de 5 ensembles de données
+simulations <- lapply(1:5, function(i) {
+  data.frame(annee = seq(2023, 2033, by = 1),
+             Somme = replicate(11, sum(rpois(100000, mean(b$nombre_sinistres)))))
+})
+
+# Création de la base avec les simulations
+base <- bind_rows(lapply(1:5, function(i) {
+  simulations[[i]] %>%
+    mutate(origine = paste("Simulation", i))
+}))
+
+base <- base %>%
+  full_join(b_resume, by = c("annee" = "annee", "Somme" = "Somme")) %>%
+  replace_na(list(origine = "Portefeuille B"))
+
+base <- base %>%
+  left_join(b_resume %>% 
+              filter(annee == 2023) %>% 
+              select(annee, Somme), 
+            by = "annee", 
+            suffix = c("", "_b_resume")) %>%
+  mutate(Somme = coalesce(Somme_b_resume, Somme)) %>%
+  select(-Somme_b_resume)
+
+gg6=ggplot(base, aes(x = annee, y = Somme, color = origine, linetype = origine)) +
+  geom_line(size = .5) +
+  scale_linetype_manual(values = c("Portefeuille B" = "solid", "Simulation 1" = "dashed",
+                                   "Simulation 2" = "dashed", "Simulation 3" = "dashed",
+                                   "Simulation 4" = "dashed", "Simulation 5" = "dashed")) +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat()+
+  labs(title = "Historique et simulation pour le portefeuille B",
+       x = "Année",
+       y = "Nombre de sinistres")+
+  coord_cartesian(ylim = c(4800, 5250))+
+  geom_hline(yintercept = resultats_bootstrap_b[[2]][2], linetype = "solid", color = "red")+
+  geom_hline(yintercept = resultats_bootstrap_b[[2]][1], linetype = "solid", color = "red")
+
+ggplotly(gg6)
+```
+
+De manière similaire, la modélisation graphique du comportement du
+nombre de sinistres pour le portefeuille B ne semble pas aberrante. Les
+lignes rouges correspondent à un intervalle de prédiction à 95 % du
+nombre sinistre par ans selon la méthode bootstrap.
+
+## Modélisation du portefeuille C {.unnumbered}
+
+### Choix technique 1 : considérer l'année 2021 comme exceptionnelle et ne pas en tenir compte {.unnumbered}
+
+Ce choix technique permet de réutiliser les techniques précédentes afin
+d'obtenir le paramètres de notre loi de Poisson et de modéliser la
+fréquence à l'aide des 4 autres années d'expostion.
+
+```{r}
+set.seed(16)
+c_without_2021 = c%>%filter(annee <2021 | annee > 2021)
+# Simulation de 5 ensembles de données
+simulations <- lapply(1:5, function(i) {
+  data.frame(annee = seq(2023, 2033, by = 1),
+             Somme = replicate(11, sum(rpois(100000, mean(c_without_2021$nombre_sinistres)))))
+})
+
+# Création de la base avec les simulations
+base <- bind_rows(lapply(1:5, function(i) {
+  simulations[[i]] %>%
+    mutate(origine = paste("Simulation", i))
+}))
+
+base <- base %>%
+  full_join(c_resume, by = c("annee" = "annee", "Somme" = "Somme")) %>%
+  replace_na(list(origine = "Portefeuille C"))
+
+base <- base %>%
+  left_join(c_resume %>% 
+              filter(annee == 2023) %>% 
+              select(annee, Somme), 
+            by = "annee", 
+            suffix = c("", "_c_resume")) %>%
+  mutate(Somme = coalesce(Somme_c_resume, Somme)) %>%
+  select(-Somme_c_resume)
+
+base_filtered <- subset(base, annee != 2021)
+
+gg7=ggplot(base_filtered, aes(x = annee, y = Somme, color = origine, linetype = origine)) +
+  geom_line(size = .5) +
+  scale_linetype_manual(values = c("Portefeuille C" = "solid", "Simulation 1" = "dashed",
+                                   "Simulation 2" = "dashed", "Simulation 3" = "dashed",
+                                   "Simulation 4" = "dashed", "Simulation 5" = "dashed")) +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat() +
+  labs(title = "Historique et simulation pour le portefeuille C",
+       x = "Année",
+       y = "Nombre de sinistres") +
+  coord_cartesian(ylim = c(5400, 5900))+
+  annotate("text", x = 2022.25, y = 5880, label = "Note: Année 2021 retirée", color = "red", size = 3.5)
+ggplotly(gg7)
+```
+
+### Choix technique 2 : considérer 2021 comme une année exceptionnelle mais en tenir compte {.unnumbered}
+
+Ce choix de prendre en compte l'année exceptionnelle présente une
+complexité notable. En effet, l'absence d'informations sur les causes
+sous-jacentes à cette année exceptionnelle rend difficile la mesure
+précise de la fréquence et de l'ampleur d'un tel événement. Avec
+seulement cinq années dans notre échantillon, la robustesse des
+conclusions tirées peut être affectée.
+
+L'intérêt de considérer cette année atypique réside dans la possibilité
+d'obtenir une estimation plus éclairante de notre Value-at-Risk (VaR).
+Une approche envisageable consisterait à calculer la variance des
+estimations des paramètres en les estimant année par année. Il serait
+également nécessaire d'estimer des intervalles de confiance pour évaluer
+si la volumétrie annuelle est suffisante et si le paramètre de
+l'ajustement par la loi de Poisson ne devient pas trop volatile
+lorsqu'il est estimé sur une seule année.
+
+Etant donnée la quasi-égalité de ses deux moment, l'utilisation d'un
+modèle poissonien pour modéliser ce type de distribution ne pose aucun
+problème majeur.
+
+Les deux questions qui se posent sont donc :
+
+**À quelle fréquence ce genre d'année se produit-il ?** **Quelle est
+l'ampleur de ce genre d'événement ?**
+
+Pour prendre en compte cela :
+
+-   Nous pouvons effectuer des tirages aléatoires en fonction des
+    années.
+-   Nous pouvons aussi calculer la variance des paramètres estimés sur
+    les\
+    5 années, cependant, avec seulement 5 observations, cette variation\
+    peut être biaisée.
+
+Nous choisissons de ne pas envisager cette hypothèse au vu des
+suppositions que nous sommes obligés de faire pour proposer un tel
+modèle. En effet, il faudrait imaginer une distribution du paramètre
+avec 5 années de sinistralité, ce qui présente trop d'incertitude en
+comparaison des méthodes de modélisation que nous mettons en place dans
+ce rapport.
+
+## Modélisation du portefeuille D {.unnumbered}
+
+Comme nous l'avons observé, le paramètre de la loi de Poisson pour la
+loi de fréquence du portefeuille D semble suivre une certaine
+croissance, nous allons donc estimer cette croissance, ainsi que
+l'incertitude quant à cette estimation.
+
+La méthode utilisée est une régression de Poisson avec une fonction
+polynomiale du deuxième degré (poly(annee, 2) dans le code) pour
+modéliser la relation entre les années et le nombre de sinistres. Cette
+approche a été choisie pour plusieurs raisons :
+
+-   La flexibilité du modèle : La fonction polynomiale permet de
+    capturer des tendances non linéaires dans les données, offrant ainsi
+    une flexibilité pour modéliser des variations complexes au fil du
+    temps.
+
+-   L'adaptabilité aux changements de tendance : En présence de
+    variations temporelles complexes, la régression de Poisson avec une
+    fonction polynomiale peut s'ajuster aux changements de tendance qui
+    ne suivent pas une relation linéaire.
+
+-   L'interprétabilité : Bien que plus complexe qu'un modèle linéaire
+    simple, l'ajout de termes polynomiaux permet toujours une
+    interprétation intuitive des coefficients associés à chaque terme,
+    fournissant ainsi des informations sur la nature des relations.
+
+```{r}
+# Supposons que tu as un dataframe appelé "donnees_regression" avec les variables "annee" et "Somme" pour le portefeuille D
+donnees_regression <- combined_data %>% filter(Portefeuille == "Portefeuille D")
+
+# Modèle de régression de Poisson
+modele_poisson <- glm(Somme ~ poly(annee, 2), data = donnees_regression, family = poisson)
+
+# Prédictions pour l'année suivante
+annees_suivantes <- data.frame(annee = c(2024))
+predictions_suivantes <- predict(modele_poisson, newdata = annees_suivantes, type = "response")
+
+# Créer le graphique ggplot avec la régression de Poisson non linéaire
+gg8=ggplot(donnees_regression, aes(x = annee, y = Somme, color = Portefeuille)) +
+  geom_line() +
+  geom_point() +
+  stat_smooth(method = "glm", formula = y ~ poly(x, 2), method.args = list(family = poisson), color = "blue", size = 0.5, se = FALSE) +
+  geom_point(data = annees_suivantes, aes(y = predictions_suivantes), color = "red", size = 3, shape = 16) +
+  labs(title = "Évolution du nombre de sinistres annuels",
+       x = "Année",
+       y = "Nombre de sinistres") +
+  scale_color_manual(values = palette_actuariat) +
+  theme_actuariat()
+
+ggplotly(gg8)
+```
+
+```{r}
+resultats <- summary(modele_poisson)
+
+# Création d'un tableau récapitulatif
+indicateurs <- data.frame(
+  Indicateur = c("Intercept", "poly(annee, 2)1", "poly(annee, 2)2", "Déviance résiduelle", "AIC", "Dispersion"),
+  Valeur = c(resultats$coefficients[1, 1], resultats$coefficients[2, 1], resultats$coefficients[3, 1], resultats$deviance, AIC(modele_poisson), "1 (Pas de surdispersion)"),
+  Significativite = c(formatC(resultats$coefficients[1, 4], digits = 3, format = "f"),
+                     formatC(resultats$coefficients[2, 4], digits = 3, format = "f"),
+                     formatC(resultats$coefficients[3, 4], digits = 3, format = "f"), NA, NA, NA),
+  Conclusion = c("Coefficient significatif", "Coefficient significatif", "Non significatif",
+                 "Faible (bon ajustement)", "Plus bas est préférable", "Pas de surdispersion")
+)
+
+# Affichage du tableau
+kable(indicateurs)
+```
+
+Malgré une potentielle non significativité, la courbe laisse penser
+qu'un deuxième degré est nécessaire, nous conserverons donc ce
+coefficient, le risque est ici un sur-ajustement.
+
+Nous obtenons donc une potentielle valeur de lambda pour le portefeuille
+D, il reste cependant une incertitude liée à la simulation de la loi de
+Poisson.
+
+## Discution sur l'incertitude des estimations
+
+Le problème majeur auquel nous sommes confrontés est la disparité des
+portefeuilles étudiés, ce qui nous contraint à adopter des comportements
+différents selon les tendances que l'on observe parmi ceux-ci.
+
+### Création d'intervalle de confiance avec la méthode bootstrap
+
+Pour traiter de l'incertitude des estimations, nous allons utiliser la
+méthode bootstrap afin de créer des intervalles de confiance pour nos
+paramètres.
+
+```{r}
+kable(
+  data.frame(
+    Statistique = c("Moyenne", "Intervalle de confiance (2.5%)", "Intervalle de confiance (97.5%)","Largeur relative"),
+    Portefeuille_A = c(mean(a$nombre_sinistres), resultats_bootstrap_a[[1]],width_a),
+    Portefeuille_B = c(mean(b$nombre_sinistres), resultats_bootstrap_b[[1]],width_b)
+  ),
+  caption = "Résultats des statistiques et des intervalles de confiance",
+)
+```
+
+D'après les résultats, nos paramètres semblent bien estimés. Les
+largeurs relatives des intervalles de confiance à 95% sont plutôt peu
+élevées, avoisinant environ 2.5%.
+
+Pour le portefeuille C, nous calculons de la même manière l'intervalle
+de confiance mais seulement sur les années de sinistralité normale
+(2019,2020,2022,2023).
+
+```{r}
+c_sans_2021=c%>%filter(annee != 2021)
+resultats_bootstrap_c <- bootstrap_1(c_sans_2021$nombre_sinistres)
+width_c <- diff(resultats_bootstrap_c[[1]])/mean(c_sans_2021$nombre_sinistres)*100
+
+
+kable(
+  data.frame(
+    Statistique = c("Moyenne", "Intervalle de confiance (2.5%)", "Intervalle de confiance (97.5%)","Largeur relative"),
+    Portefeuille_C = c(mean(c_sans_2021$nombre_sinistres), resultats_bootstrap_c[[1]],width_c)
+  ),
+  caption = "Résultats des statistiques et des intervalles de confiance",
+)
+```
+
+Notre estimation semble correcte, compte tenu de la largeur relative de
+l'intervalle de confiance. Cependant, ce choix technique est plutôt
+prudent car il ne tient pas compte de l'année exceptionnellement basse
+en sinistralité.
+
+```{r}
+annees = expand.grid(annee=2019:2023)
+donnees_d <- annees %>%
+  mutate(prediction = predict(modele_poisson, ., type = "response")) %>%
+  left_join(data.frame(annee=rep(2019:(2019 + 4), each =
+4),nombre_sinistres = rep(0:3,5)), by=c("annee"="annee")) %>%
+  mutate(moyenne_par_police_predit = prediction / nb_police) %>%
+  left_join(d_resume, by = c("annee" = "annee")) %>%
+  mutate(Portefeuille = "Portefeuille D") %>%
+  left_join(distribution, by = c("annee" = "annee", "Portefeuille" =
+"Portefeuille","nombre_sinistres"="nombre_sinistres")) %>%
+  mutate(prediction_nb_sinistre = round(dpois(nombre_sinistres,
+moyenne_par_police_predit) * 100000))%>%
+  replace_na(list(n = 1))
+
+gg9=ggplot(donnees_d, aes(x = as.factor(nombre_sinistres))) +
+geom_col(aes(y = n, fill = "Données Réelles"), stat = "identity",
+position = position_dodge(width = 0.8), alpha = 0.5, width=0.8) +
+geom_col(aes(y = prediction_nb_sinistre, fill = "Données Prédites"),
+stat = "identity", position = position_dodge(width = 0.8), alpha =
+0.5, width=0.5) +
+labs(title = "Distribution du Nombre de Sinistres par Police par Année
+(Échelle Logarithmique sur Portefeuille D)",
+x = "Année",
+y = "Nombre de Polices") +
+facet_wrap(~ annee, scales = "free_y", ncol = 2) +
+theme_actuariat() +
+scale_fill_manual(values = c("Données Réelles" = "#4E79A7", "Données
+Prédites" = "#F28E2B"), name = "Légende") +
+scale_y_log10()
+
+ggplotly(gg9)
+```
+
+Le modèle s'ajuste plutôt bien, des tests statistiques tel que le test
+du CHI-2 pourraient permettre de valider l'ajustement, cependant, en
+présence d'une telle quantité de données, le test sera presque
+nécessairement significatif et soulignera un bon ajustement. On peut
+essayer de le faire pour un portefeuille. Cependant il apparait sur le
+portefeuille D que l'année 2022 est caractérisé par un nombre beaucoup
+plus important de polices ayant 3 sinistres. Cette valeurs peut presque
+être considéré comme extrème.
+
+```{r,echo=FALSE}
+  p_values_A = c()
+  p_values_B = c()
+  p_values_C = c()
+  p_values_D = c()
+  
+
+for (annees in 2019:2023) {
+  echantillon_A <- a %>% filter(annee == annees)
+  echantillon_B <- b %>% filter(annee == annees)
+  echantillon_C <- c %>% filter(annee == annees)
+  echantillon_D <- d %>% filter(annee == annees)
+  param_A <- combined_data_1 %>% filter(Portefeuille=="Portefeuille A")%>%filter(annee == annees)%>%pull(Moyenne)
+  param_B <- combined_data_1 %>% filter(Portefeuille=="Portefeuille B")%>%filter(annee == annees)%>%pull(Moyenne)
+  param_C <- combined_data_1 %>% filter(Portefeuille=="Portefeuille C")%>%filter(annee == annees)%>%pull(Moyenne)
+  param_D <- combined_data_1 %>% filter(Portefeuille=="Portefeuille D")%>%filter(annee == annees)%>%pull(Moyenne)
+
+  probas_A <- dpois(0:max(echantillon_A$nombre_sinistre), lambda = param_A)
+  probas_B <- dpois(0:max(echantillon_B$nombre_sinistre), lambda = param_B)
+  probas_C <- dpois(0:max(echantillon_C$nombre_sinistre), lambda = param_C)
+  probas_D <- dpois(0:max(echantillon_D$nombre_sinistre), lambda = param_D)
+
+  table_obs_A <- table(echantillon_A$nombre_sinistre)
+  table_obs_B <- table(echantillon_B$nombre_sinistre)
+  table_obs_C <- table(echantillon_C$nombre_sinistre)
+  table_obs_D <- table(echantillon_D$nombre_sinistre)
+
+  probas_A <- probas_A / sum(probas_A)
+  probas_B <- probas_B / sum(probas_B)
+  probas_C <- probas_C / sum(probas_C)
+  probas_D <- probas_D / sum(probas_D)
+
+  resultat_test_A <- chisq.test(table_obs_A, p = probas_A)
+  resultat_test_B <- chisq.test(table_obs_B, p = probas_B)
+  resultat_test_C <- chisq.test(table_obs_C, p = probas_C)
+  resultat_test_D <- chisq.test(table_obs_D, p = probas_D)
+
+p_values_A = c(p_values_A, resultat_test_A$p.value)
+  p_values_B = c(p_values_B, resultat_test_B$p.value)
+  p_values_C = c(p_values_C, resultat_test_C$p.value)
+  p_values_D = c(p_values_D, resultat_test_D$p.value)
+}
+
+# Créer un tableau avec les années et les p-values pour chaque portefeuille
+resultats_tableau_p <- data.frame(Annee = 2019:2023, P_Value_A =
+p_values_A, P_Value_B = p_values_B, P_Value_C = p_values_C, P_Value_D
+= p_values_D)
+
+# Afficher le tableau
+kable(resultats_tableau_p)
+
+
+
+```
+
+Le test du chi-2 ne permet pas de rejeter l'hypothèse nulle (H0)
+stipulant que le portefeuille suit la même distribution que la loi de
+Poisson, avec la fréquence de sinistres par police comme paramètre pour
+l'année en question. Cependant, il est important de noter que ce test
+peut donner des résultats similaires pour différentes distributions.
+
+Parmi les résultats, une p-value se distingue au niveau de l'année 2022
+pour le portefeuille D, ce résultats est dû au nombre important de
+police ayant 3 sinistres comme nous avons pu le voir graphiquement.
+
+```{r}
+  echantillon_D <- d %>% filter(annee == 2022)
+  param_D <- combined_data_1 %>% filter(Portefeuille=="Portefeuille D")%>%filter(annee == 2022)%>%pull(Moyenne)
+  probas_D <- dpois(0:max(echantillon_D$nombre_sinistre), lambda = param_D)
+  table_obs_D <- table(echantillon_D$nombre_sinistre)
+  table_obs_D=as.data.frame(as.matrix(table_obs_D))%>%mutate(Realisation=V1)%>%select(-V1)
+  probas_D <- as.integer(probas_D / sum(probas_D)*100000)
+  kable(data.frame(Prediction=probas_D,Realisation=table_obs_D))
+```
+
+Malgré ce constat, nous continuons la modélisation à l'aide d'une loi de
+Poisson sur tous les portefeuilles à la maille annuelle, étant donné la
+proportion de portefeuilles ne validant pas le test (5%). Cependant,
+nous gardons à l'esprit le fait que des valeurs plus extrêmes peuvent
+apparaître sur le portefeuille D.
+
+Néanmoins, un bon ajustement des données observées ne garantit pas
+nécessairement une bonne capacité de prédiction. Pour améliorer la
+capacité prédictive, nous avons ajouté des prévisions pour les années
+suivantes, basées sur les tendances observées dans les données.
+
+Certaines techniques peuvent nous permettre d'obtenir de meilleures
+capacités de prédiction. Par exemple, la validation croisée k-fold est
+une technique d'évaluation de modèles qui divise les données en k
+sous-ensembles, entraînant et testant le modèle k fois en utilisant
+différents sous-ensembles comme ensembles d'entraînement et de test à
+chaque itération. Cela permet d'obtenir une estimation plus fiable de la
+performance du modèle en utilisant toutes les données disponibles, ce
+qui est particulièrement utile lorsque les données sont limitées.
+
+# Distribution empirique des coûts de sinistres
+
+Nous examinerons tout d'abord la distibution des coûts de sinistres sans
+distinction par années.
+
+```{r}
+# Création d'un data frame avec l'ensemble des informations sur les 4 portefeuilles
+portA<-portA %>% mutate(portefeuille="Portefeuille A")
+portB<-portB %>% mutate(portefeuille="Portefeuille B")
+portC<-portC %>% mutate(portefeuille="Portefeuille C")
+portD<-portD %>% mutate(portefeuille="Portefeuille D")
+
+portTotal<-rbind(portA, portB, portC, portD)
+
+# graphique des coûts en fonction des portefeuilles
+gg10=ggplot(portTotal, aes(x=cout, y=..density..))+
+  geom_histogram(color="black", fill="white", bins=100)+facet_wrap(~portefeuille, ncol=2)+
+  labs(x="Coût", y="Fréquence", title="Fréquence des coûts des sinistres")+scale_color_manual(palette_actuariat)+theme_actuariat()
+ggplotly(gg10)
+```
+
+Nous observons que les quatre portefeuilles ont une distribution qui
+rappelle celle de la loi gamma. Nous pouvons observer un pic de
+fréquence des coûts de sinistres entre 500 et 1 000 € pour les quatre
+portefeuilles.
+
+Effectuons maintenant une comparaisons graphique des coûts par année sur
+chaque portefeuilles.
+
+```{r}
+# Détail des coûts de sinistres par année 
+gg11=ggplot(portA, aes(x=cout, y=..density.., color=as.factor(annee), 
+                  fill=as.factor(annee)))+
+  geom_density(alpha=0.3)+
+  labs(x="Coût", y="Fréquence", title="Fréquence des coûts des sinistres")+
+  scale_color_discrete(name="Années (portefeuille A)") +theme_actuariat()
+ggplotly(gg11)
+```
+
+La distribution des coûts de sinistres est similaire sur les cinq années
+analysées, avec une distribution qui semble proche de celle d'une loi
+gamma. Néanmoins, nous pouvons observer de légères différences sur les
+pics de fréquence en fonction des années. Les pics de fréquence pour les
+années 2021, 2022 et 2023 sont similaires, tandis que les pics de
+fréquence pour les années 2019 et 2020 sont plus faibles.
+
+```{r}
+gg12=ggplot(portB, aes(x=cout, y=..density.., color=as.factor(annee), 
+                  fill=as.factor(annee)))+
+  geom_density(alpha=0.3)+
+  labs(x="Coût", y="Fréquence", title="Fréquence des coûts des sinistres")+
+  scale_color_discrete(name="Années (portefeuille B") +theme_actuariat()
+ggplotly(gg12) 
+```
+
+La distribution des coûts de sinistres semble suivre une loi gamma pour
+les cinq années analysées. Néanmoins, les pics de fréquences sont
+différents. En effet, les pics de fréquence des années 2022 et 2023 sont
+inférieurs à ceux des années 2019, 2020 et 2021.
+
+```{r}
+gg13=ggplot(portC, aes(x=cout, y=..density.., color=as.factor(annee), 
+                  fill=as.factor(annee)))+
+  geom_density(alpha=0.3)+
+  labs(x="Coût", y="Fréquence", title="Fréquence des coûts des sinistres")+
+  scale_color_discrete(name="Années (portefeuille C)") +theme_actuariat()
+ggplotly(gg13)
+```
+
+La distribution des coûts de sinistres semble suivre une loi gamma pour
+les cinq années analysées. Néanmoins, nous observons une baisse
+progressive de la valeur du pic de fréquence des coûts de sinistres de
+2019 à 2022, et les pics de fréquence des années 2022 et 2023 sont
+similaires.
+
+```{r}
+gg14=ggplot(portD, aes(x=cout, y=..density.., color=as.factor(annee), 
+                  fill=as.factor(annee)))+
+  geom_density(alpha=0.3)+
+  labs(x="Coût", y="Fréquence", title="Fréquence des coûts des sinistres")+
+  scale_color_discrete(name="Années (portefeuille D)") +theme_actuariat()
+ggplotly(gg14)
+```
+
+La distribution des coûts de sinistres semble suivre une loi gamma pour
+les cinq années analysées. Néanmoins, l'année 2019 est celle qui a le
+pic de fréquence le plus élevé. L'année 2020 n'a pas de pic de fréquence
+bien défini, mais plutôt deux pics de fréquence. L'année 2021 est
+semblable à l'année 2020, avec cependant un seul pic de fréquence. Les
+années 2022 et 2023 sont similaires, avec le pic de fréquence le plus
+faible.
+
+# Ajustement d'une loi gamma tronquée pour modéliser les coûts de sinistres
+
+## Loi Gamma tronquée
+
+On dit qu'une variable aléatoire $Y$ suit une loi Gamma tronquée si :
+
+$$
+Loi(Y)=Loi(X|X>t)
+$$
+
+avec $X\sim Gamma$ et $t\in\mathbb{R}$.
+
+La densité de la loi Gamma tronquée est donnée par :
+
+$$
+f(x)=\frac{f_{\Gamma}(x)}{1-F_{\Gamma}(t)}
+$$
+
+avec $F_{\Gamma}$ la fonction de répartition de la loi Gamma, et
+$f_{\Gamma}$ sa fonction de densité.
+
+Nous prendrons, comme valeur seuil $t$ le minimum des coûts de sinistres
+de chaque portefeuille.
+
+Nous avons donc les valeurs suivantes pour les minimums de sinistres :
+
+```{r}
+# data frame contenant les valeurs des seuils
+minA<-min(portA$cout)
+minB<-min(portB$cout)
+minC<-min(portC$cout)
+minD<-min(portD$cout)
+
+t<-data.frame(Portefeuille=c("Portefeuille A","Portefeuille B","Portefeuille C","Portefeuille D"),
+                seuil=c(minA, minB, minC, minD))
+kable(t)
+```
+
+Ces valeurs peuvent nous faire dire qu'il y a une franchise sur les
+contrats d'assurance concernés par les bases de données mises à notre
+disposition, fixée à 200 €.
+
+## Ajustement par la méthode du maximum de vraisemblance
+
+Nous ajusterons la loi gamma tronquée aux différentes données avec la
+méthode du maximum de vraisemmblance. Nous procèderons comme suit :
+
+-   Nous ajusterons une loi gamma tronquée sur les coûts de sinistres
+    pour chaque portefeuille, sans distinction d'année
+
+-   Nous ajusterons ensuite une loi gamma tronquée sur les coûts de
+    sinistres pour chaque portefeuille, en effectuant une distinction
+    par année
+
+-   Nous examinerons l'évolution des paramètres des loi gamma tronquées
+    en fonction du temps, et nous déciderons ainsi de la méthode de
+    modélisation des paramètres pour l'année 2024.
+
+### Ajustement d'une loi gamma tronquée pour les coûts de sinistres sans distinction d'année
+
+La méthode du maximum de vraisemblance consiste à estimer les différents
+paramètres d'une loi de probabilité en utilisant la fonction de
+vraisemblance. Elle est donnée par :
+
+$$\mathcal{l}(\mathcal{D},\theta)=\prod_{i=1}^{n} f(x_{i}, \theta)$$
+avec :
+
+-   $\mathcal{D}=(x_{1},...,x_{n})$ les données empiriques
+
+-   $\theta$ le ou les paramètre(s) de la loi de probabilité étudiée
+
+-   $f$ la fonction de densité de la loi étudiée.
+
+Pour obtenir les estimateurs du maximum de vraisemblance, il faut
+annuler les dérivées partielles de la fonction de vraisemblance, ou de
+la fonction de log-vraisemblance, définie par :
+$$l(\mathcal{D},\theta)=log\left(\mathcal{L}(\mathcal{D},\theta)\right)$$
+Pour ajuster la loi gamma tronquée à nos données, nous utiliserons le
+package bbmle, et notamment la fonction mle2.
+
+```{r}
+# Densité de la loi gamme tronquée 
+
+dgamma_tronquee <- function(x, forme, echelle, seuil) {
+  const <- 1-pgamma(seuil, forme, echelle)
+  dgamma(x, forme, echelle) / const
+}
+
+# Fonction de répartition de la loi gamma tronquée 
+
+pgamma_tronquee<-function(x, forme,  echelle, seuil){
+  const<-1-pgamma(seuil, forme, echelle)
+  pgamma(x, forme, echelle)/const
+}
+
+# Fonction de la log-vraisemblance négative 
+
+log_vrais_negative2<-function(x, forme, echelle, seuil){
+  return(-sum(log(dgamma_tronquee(x, forme, echelle, seuil))))
+}
+
+# Estimation des paramètres 
+if (!require("bbmle")) install.packages("bbmle")
+library(bbmle)
+
+estimationA<-mle2(minuslogl = log_vrais_negative2, 
+                  start=list(forme=1, echelle=0.1), 
+                  data=list(x=portA$cout, seuil=minA), method = "Nelder-Mead")
+estimationB<-mle2(minuslogl = log_vrais_negative2, 
+                  start=list(forme=1, echelle=0.1), 
+                  data=list(x=portB$cout, seuil=minB),method="Nelder-Mead")
+estimationC<-mle2(minuslogl = log_vrais_negative2, 
+                  start=list(forme=1, echelle=0.1), 
+                  data=list(x=portC$cout, seuil=minC), method="Nelder-Mead")
+estimationD<-mle2(minuslogl = log_vrais_negative2, 
+                  start=list(forme=1, echelle=0.1), 
+                  data=list(x=portD$cout, seuil=minD), method="Nelder-Mead")
+
+# Extraction des coefficients 
+
+forme_estimeeA<-coef(estimationA)["forme"][[1]]; 
+forme_estimeeB<-coef(estimationB)["forme"][[1]]; 
+forme_estimeeC<-coef(estimationC)["forme"][[1]]; 
+forme_estimeeD<-coef(estimationD)["forme"][[1]]
+echelle_estimeeA<-coef(estimationA)["echelle"][[1]]; 
+echelle_estimeeB<-coef(estimationB)["echelle"][[1]]; 
+echelle_estimeeC<-coef(estimationC)["echelle"][[1]]; 
+echelle_estimeeD<-coef(estimationD)["echelle"][[1]]
+
+x_value_A <- seq(min(portA$cout), max(portA$cout), by=1); 
+x_value_B <- seq(min(portB$cout), max(portB$cout), by=1); 
+x_value_C <- seq(min(portC$cout), max(portC$cout), by=1); 
+x_value_D <- seq(min(portD$cout), max(portD$cout), by=1) 
+
+densA <- dgamma_tronquee(x=x_value_A, forme=forme_estimeeA, echelle=echelle_estimeeA, seuil=minA);
+densB <- dgamma_tronquee(x=x_value_B, forme=forme_estimeeB,echelle=echelle_estimeeB, seuil=minB); 
+densC <- dgamma_tronquee(x=x_value_C, forme=forme_estimeeC,echelle=echelle_estimeeC ,seuil=minC); 
+densD <- dgamma_tronquee(x=x_value_D, forme=forme_estimeeD,echelle=echelle_estimeeD, seuil=minD)
+
+dataA<-data.frame(cbind(x_value_A, densA))
+dataB<-data.frame(cbind(x_value_B, densB))
+dataC<-data.frame(cbind(x_value_C, densC))
+dataD<-data.frame(cbind(x_value_D, densD))
+
+# Tracé des graphiques d'adéquation (méthode max de vraisemblance)
+
+gg15=ggplot(portA, aes(x=cout)) +
+  geom_histogram(aes(y=..density.., color="Coûts de sinistres"), fill="white", bins=100) + 
+  geom_line(data=dataA, aes(x=x_value_A, y=densA, color="Estimation"))+ scale_color_manual(name="Légende", values=c("Coûts de sinistres"="black", "Estimation"="blue"))+
+  labs(x="Coût", y="Fréquence des coûts",title="Vérification de l'ajustement sur le portefeuille A")
+
+gg16=ggplot(portB, aes(x=cout)) +
+  geom_histogram(aes(y=..density.., color="Coûts de sinistres"), fill="white", bins=100) + 
+  geom_line(data=dataB, aes(x=x_value_B, y=densB, color="Estimation"))+scale_color_manual(name="Légende", values=c("Coûts de sinistres"="black", "Estimation"="blue"))+
+  labs(x="Coût", y="Fréquence des coûts",title="Vérification de l'ajustement sur le portefeuille B")
+
+gg17=ggplot(portC, aes(x=cout)) +
+  geom_histogram(aes(y=..density.., color="Coûts de sinistres"), fill="white", bins=100) + 
+  geom_line(data=dataC, aes(x=x_value_C, y=densC, color="Estimation"))+scale_color_manual(name="Légende", values=c("Coûts de sinistres"="black", "Estimation"="blue"))+
+  labs(x="Coût", y="Fréquence des coûts", 
+       title="Vérification de l'ajustement sur le portefeuille C")
+
+gg18=ggplot(portD, aes(x=cout)) +
+  geom_histogram(aes(y=..density.., color="Coûts de sinistres"), fill="white", bins=100) + 
+  geom_line(data=dataD, aes(x=x_value_D, y=densD, color="Estimation"))+scale_color_manual(name="Légende", values=c("Coûts de sinistres"="black", "Estimation"="blue"))+
+  labs(x="Coût", y="Fréquence des coûts", 
+       title="Vérification de l'ajustement sur le portefeuille D")
+
+ggplotly(gg15)
+ggplotly(gg16)
+ggplotly(gg17)
+ggplotly(gg18)
+```
+
+Nous pouvons maintenant vérifier la qualité de l'ajustement. Nous
+pouvons tout d'abord comparer les moyennes et variances des coûts réels
+avec les moyennes et variances des lois que nous avons ajustées :
+
+```{r}
+# Calcul de la moyenne empirique 
+moyenne_empi<-c(mean(portA$cout),mean(portB$cout),mean(portC$cout),mean(portD$cout))
+# Calcul de la moyenne estimée
+moyenne_estim<-c(sum(dataA$densA*dataA$x_value_A),sum(dataB$densB*dataB$x_value_B),sum(dataC$densC*dataC$x_value_C),sum(dataD$densD*dataD$x_value_D))
+
+# Calcul de la variance empirique 
+var_empi<-c(var(portA$cout),var(portB$cout),var(portC$cout),var(portD$cout))
+# Calcul de la variance estimée 
+var_estim<-c(sum(dataA$densA*dataA$x_value_A^2)-(sum(dataA$densA*dataA$x_value_A))^2, sum(dataB$densB*dataB$x_value_B^2)-(sum(dataB$densB*dataB$x_value_B))^2, sum(dataC$densC*dataC$x_value_C^2)-(sum(dataC$densC*dataC$x_value_C))^2, sum(dataD$densD*dataD$x_value_D^2)-(sum(dataD$densD*dataD$x_value_D))^2)
+
+# Regroupement dans un data frame
+statistiques<-data.frame(moyenne_empi, moyenne_estim, var_empi, var_estim)
+
+names(statistiques)<-c("Moyenne empirique", "Moyenne estimée", "Variance empirique", "Variance estimée"); row.names(statistiques)<-c("Portefeuille A","Portefeuille B","Portefeuille C", "Portefeuille D")
+kable(statistiques)
+```
+
+Nous observons que les statistiques que nous avons calculées sont
+proches entre la réalité et les estimations que nous en avons faite.
+Cela confortera la pertinence de nos projections pour l'année 2024.
+
+Nous pouvons maintenant vérifier l'ajustement de notre loi en calculant
+l'erreur moyenne absolue (notée $MAE$) et l'erreur totale absolue (notée
+$TAE$), qui sont données par les formules suivantes :
+
+$$
+\begin{align*}
+&MAE=\frac{1}{n}\sum_{i=1}^{n} \left|x_{i}^{prédit}-x_{i}^{réel}\right|\\
+&TAE=\sum_{i=1}^{n} \left|x_{i}^{prédit}-x_{i}^{réel}\right|
+\end{align*}
+$$
+
+avec :
+
+-   $n$ le nombre d'observations
+
+-   $x_{i}^{prédit}$ et $x_{i}^{réel}$ les valeurs des observations
+    prédites et réelles
+
+Pour calculer l'erreur moyenne absolue, nous calculerons, sur des
+sous-ensembles distincts de l'ensemble des coûts de sinistres, la
+probabilité qu'un coût de sinistres soit inclus dans cet ensemble. Les
+sous-ensembles auront le même cardinal, que nous fixerons à 20.
+
+Nous comparerons ensuite ces probabilités empiriques avec les
+probabilités estimées qu'un coût de sinistres, noté $C$, soit contenu
+dans un interval $[a,b]$ (avec $a<b$). Cette probabilité estimée sera
+donnée par : $$\mathbb{P}\left(C\in[a,b]\right)=F(b)-F(a)$$ avec
+$F(x)=\frac{F_{\Gamma}(x)}{1-F_{\Gamma}(t)}$ la fonction de répartition
+de la loi gamma tronquée de seuil $t$.
+
+```{r}
+pas<-20 #Définition de la taille des sous-ensembles 
+
+# fonction de comptage 
+
+comptage_sinistres <- function(nombre, couts_sinistres) {
+  limite_sup <- nombre + pas
+  sum(couts_sinistres >= nombre & couts_sinistres < nombre)
+}
+
+verif_A<-data.frame(ensembles=seq(minA, max(portA$cout), by=pas))
+verif_B<-data.frame(ensembles=seq(minB, max(portB$cout), by=pas))
+verif_C<-data.frame(ensembles=seq(minC, max(portC$cout), by=pas))
+verif_D<-data.frame(ensembles=seq(minD, max(portD$cout), by=pas))
+
+verif_A<-verif_A %>% mutate(proba_estim=pgamma_tronquee(lead(ensembles),forme=forme_estimeeA, echelle=echelle_estimeeA, seuil=minA )-pgamma_tronquee(ensembles,forme=forme_estimeeA, echelle=echelle_estimeeA, seuil=minA)) 
+verifA<-sapply(verif_A$ensembles, comptage_sinistres, portA$cout)
+verifA<-verifA/nrow(portA)
+verif_A["proba_empi"]<-verifA
+verif_A <- verif_A %>% filter(!is.na(proba_estim))
+
+verif_B<-verif_B %>% mutate(proba_estim=pgamma_tronquee(lead(ensembles),forme=forme_estimeeB, echelle=echelle_estimeeB, seuil=minB)-pgamma_tronquee(ensembles,forme=forme_estimeeB, echelle=echelle_estimeeB, seuil=minB)) 
+verifB<-sapply(verif_B$ensembles, comptage_sinistres, portB$cout)
+verifB<-verifB/nrow(portB)
+verif_B["proba_empi"]<-verifB
+verif_B <- verif_B %>% filter(!is.na(proba_estim))
+
+verif_C<-verif_C %>% mutate(proba_estim=pgamma_tronquee(lead(ensembles),forme=forme_estimeeC, echelle=echelle_estimeeC, seuil=minC)-pgamma_tronquee(ensembles,forme=forme_estimeeC, echelle=echelle_estimeeC, seuil=minC)) 
+verifC<-sapply(verif_C$ensembles, comptage_sinistres, portC$cout)
+verifC<-verifC/nrow(portC)
+verif_C["proba_empi"]<-verifC
+verif_C <- verif_C %>% filter(!is.na(proba_estim))
+
+verif_D<-verif_D %>% mutate(proba_estim=pgamma_tronquee(lead(ensembles),forme=forme_estimeeD, echelle=echelle_estimeeD, seuil=minD )-pgamma_tronquee(ensembles,forme=forme_estimeeD, echelle=echelle_estimeeD, seuil=minD)) 
+verifD<-sapply(verif_D$ensembles, comptage_sinistres, portD$cout)
+verifD<-verifD/nrow(portD)
+verif_D["proba_empi"]<-verifD
+verif_D <- verif_D %>% filter(!is.na(proba_estim))
+
+TAE_A<-sum(abs(verif_A$proba_estim-verif_A$proba_empi)); MAE_A<-TAE_A/nrow(verif_A)
+TAE_B<-sum(abs(verif_B$proba_estim-verif_B$proba_empi)); MAE_B<-TAE_B/nrow(verif_B)
+TAE_C<-sum(abs(verif_C$proba_estim-verif_C$proba_empi)); MAE_C<-TAE_C/nrow(verif_C)
+TAE_D<-sum(abs(verif_D$proba_estim-verif_D$proba_empi)); MAE_D<-TAE_D/nrow(verif_D)
+recap<-data.frame(Portefeuille=c("A", "B", "C", "D"), MAE=c(MAE_A, MAE_B, MAE_C, MAE_D), TAE=c(TAE_A, TAE_B, TAE_C, TAE_D))
+kable(recap)
+```
+
+Nous observons que le l'erreur absolue totale et l'erreur absolue
+moyenne sont faibles, ce qui nous permet de dire que l'ajustement de la
+loi gamma tronquée à l'aide des estimateurs du maximum de vraisemblance
+est pertinent sur nos quatre portefeuilles.
+
+### Ajustement d'une loi gamma tronquée pour les coûts de sinistres avec distinction d'année
+
+Nous allons maintenant ajuster une loi gamme tronquée en fonction du
+portefeuille et des années. Voici l'ensemble des paramètres estimés par
+la méthode du maximum de vraisemblance :
+
+```{r}
+# ajustement loi gamma tronquée par an et par portefeuille 
+
+parametreA_annee<-
+  data.frame(forme=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2019], seuil=minA), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2020], seuil=minA), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2021], seuil=minA), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2022], seuil=minA), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2023], seuil=minA), method = "Nelder-Mead"))["forme"][[1]]),
+             echelle=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2019], seuil=minA), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2020], seuil=minA), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2021], seuil=minA), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2022], seuil=minA), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portA$cout[portA$annee==2023], seuil=minA), method = "Nelder-Mead"))["echelle"][[1]]))
+parametreA_annee<-parametreA_annee %>% mutate (annee=c(2019, 2020, 2021, 2022, 2023))%>% mutate(portefeuille="Portefeuille A")
+
+parametreB_annee<-
+  data.frame(forme=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2019], seuil=minB), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2020], seuil=minB), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2021], seuil=minB), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2022], seuil=minB), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2023], seuil=minB), method = "Nelder-Mead"))["forme"][[1]]),
+             echelle=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2019], seuil=minB), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2020], seuil=minB), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2021], seuil=minB), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2022], seuil=minB), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portB$cout[portB$annee==2023], seuil=minB), method = "Nelder-Mead"))["echelle"][[1]]))
+parametreB_annee<-parametreB_annee %>% mutate (annee=c(2019, 2020, 2021, 2022, 2023)) %>% mutate(portefeuille="Portefeuille B")
+
+
+parametreC_annee<-
+  data.frame(forme=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2019], seuil=minC), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2020], seuil=minC), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2021], seuil=minC), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2022], seuil=minC), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2023], seuil=minC), method = "Nelder-Mead"))["forme"][[1]]),
+             echelle=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2019], seuil=minC), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2020], seuil=minC), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2021], seuil=minC), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2022], seuil=minC), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portC$cout[portC$annee==2023], seuil=minC), method = "Nelder-Mead"))["echelle"][[1]]))
+parametreC_annee<-parametreC_annee %>% mutate (annee=c(2019, 2020, 2021, 2022, 2023))%>% mutate(portefeuille="Portefeuille C")
+
+
+parametreD_annee<-
+  data.frame(forme=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2019], seuil=minD), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2020], seuil=minD), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2021], seuil=minD), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2022], seuil=minD), method = "Nelder-Mead"))["forme"][[1]],
+                     coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2023], seuil=minD), method = "Nelder-Mead"))["forme"][[1]]),
+             echelle=c(coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2019], seuil=minD), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2020], seuil=minD), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2021], seuil=minD), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2022], seuil=minD), method = "Nelder-Mead"))["echelle"][[1]],
+                       coef(mle2(minuslogl = log_vrais_negative2, start=list(forme=1, echelle=0.1),data=list(x=portD$cout[portD$annee==2023], seuil=minD), method = "Nelder-Mead"))["echelle"][[1]]))
+parametreD_annee<-parametreD_annee %>% mutate (annee=c(2019, 2020, 2021, 2022, 2023))%>% mutate(portefeuille="Portefeuille D")
+
+# On fusionne tout en un data frame 
+
+parametre_annee <- rbind(parametreA_annee, parametreB_annee, parametreC_annee, parametreD_annee)
+
+# data frame à afficher 
+kable(parametre_annee)
+```
+
+Nous pouvons maintenant étudier l'évolution des deux paramètres, sur
+chaque portefeuille, en fonction du temps, afin de savoir comment
+modéliser les paramètres pour l'année 2024.
+
+```{r}
+gg19=ggplot(parametre_annee, aes(x=annee, y=forme))+geom_line()+geom_point()+
+  facet_wrap(~portefeuille, ncol=2)+theme_actuariat()+
+  scale_color_manual(values=palette_actuariat)+
+  labs(x="Année", y="Paramètre de forme", title="Evolution du paramètre de forme")
+gg20=ggplot(parametre_annee, aes(x=annee, y=echelle))+geom_line()+geom_point()+
+  facet_wrap(~portefeuille, ncol=2)+theme_actuariat()+
+  scale_color_manual(values=palette_actuariat)+ylim(0.0012,0.0021)+
+  labs(x="Année", y="Paramètre d'échelle", title="Evolution du paramètre d'échelle")
+
+ggplotly(gg19)
+ggplotly(gg20)
+
+```
+
+### Portefeuille A {.unnumbered}
+
+L'évolution des deux paramètres est stable dans le temps, le paramètre
+de forme est proche de 2, tandis que le paramètre d'échelle est proche
+de 0,002. Nous modéliserons les deux paramètres par une régression
+linéaire.
+
+### Portefeuille B {.unnumbered}
+
+Nous observons que le paramètre de forme est stable, légèrement au
+dessus de 2, sur les années 2019, 2020 et 2023. Néanmoins, il chute
+fortement en 2021, et reste bas en 2022 en comparaison aux autres
+années. Le paramètre d'échelle semble quant-à-lui être en légère
+décroissance sur les années 2019, 2020 et 2023, mais il chute fortement
+en 2021, et ne croit que légèrement en 2022. Nous modéliserons les deux
+paramètres en prenant la moyenne des paramètres annuels, ce qui nous
+permettra de pondérer les valeurs extrèmes par les valeurs "normales",
+plus nombreuses.
+
+### Portefeuille C {.unnumbered}
+
+Nous observons une stabilité apparente du paramètre de forme autour de
+2, à l'exception de l'année 2022 où il diminue à 1,4. Le paramètre
+d'échelle semble lui en légère décroissance, à l'exception de l'année
+2022 où il diminue fortement. Nous modéliserons les deux paramètres par
+une régression linéaire, en supprimant des variables explicatives
+l'année 2022, celle-ci semblant être une année exceptionnelle.
+
+### Portefeuille D {.unnumbered}
+
+Le paramètre de forme semble stable dans le temps, autour de 2. Le
+paramètre d'échelle décroit progressivement au cours du temps. Aucune
+valeur exceptionnelle ou anormale n'est observée. Nous modéliserons les
+deux paramètres par une régression linéaire.
+
+### Modélisation des paramètres des portefeuilles A, C et D
+
+Commençons par retraiter les données du portefeuille C.
+
+```{r}
+# suppression de l'annee 2022 dans le portefeuille C 
+parametreC_annee<-parametreC_annee %>% filter(annee %in% c(2019, 2020, 2021, 2023))
+
+kable(rbind(parametreA_annee, parametreC_annee, parametreD_annee))
+```
+
+Nous pouvons maintenant ajuster une régression linéaire, avec comme
+variable explicative l'année et comme variable expliquée les paramètres.
+
+```{r}
+# ajustement d'un modèle de régression linéaire
+forme_portA <- lm(forme ~ annee, data=parametreA_annee)
+forme_portC <- lm(forme ~ annee, data=parametreC_annee)
+forme_portD <- lm(forme ~ annee, data=parametreD_annee)
+
+echelle_portA<-lm(echelle ~ annee, data=parametreA_annee)
+echelle_portC<-lm(echelle ~ annee, data=parametreC_annee)
+echelle_portD<-lm(echelle ~ annee, data=parametreD_annee)
+
+# Data frame avec les prédictions des régressions linéaires 
+annee_prediction<-data.frame(annee=2024)
+
+predictionA<-data.frame(annee=2024, forme=predict(forme_portA, newdata=annee_prediction), 
+                          echelle=predict(echelle_portA, newdata=annee_prediction), 
+                        portefeuille="Portefeuille A")
+predictionC<-data.frame(annee=2024, forme=predict(forme_portC, newdata=annee_prediction), 
+                        echelle=predict(echelle_portC, newdata=annee_prediction), 
+                        portefeuille="Portefeuille C")
+predictionD<-data.frame(annee=2024, forme=predict(forme_portD, newdata=annee_prediction), 
+                        echelle=predict(echelle_portD, newdata=annee_prediction), 
+                        portefeuille="Portefeuille D")
+predictionACD<-rbind(predictionA, predictionC, predictionD)
+
+# Graphiques avec la regression
+
+paramACD<-rbind(parametreA_annee, parametreC_annee, parametreD_annee)
+
+gg21=ggplot(paramACD, aes(x=annee, y=forme))+geom_line(aes(color="Paramètre de forme"))+geom_point(aes(color="Paramètre de forme"))+
+  geom_smooth(aes(color="Régression"), method="lm", se=FALSE)+geom_point(data=predictionACD, aes(x=annee, y=forme, color="Prédiction"))+ scale_color_manual(name="Légende", values=c("Paramètre de forme"="black", "Régression"="blue", "Prédiction"="orange"))+
+  facet_wrap(~portefeuille, ncol=2)+theme_actuariat()+
+  labs(x="Année", y="Paramètre de forme", title="Evolution du paramètre de forme")
+gg22=ggplot(paramACD, aes(x=annee, y=echelle))+geom_line(aes(color="Paramètre d'echelle"))+geom_point(aes(color="Paramètre d'echelle"))+
+  geom_smooth(aes(color="Régression"), method="lm", se=FALSE)+geom_point(data=predictionACD, aes(x=annee, y=echelle, color="Prédiction"))+ scale_color_manual(name="Légende", values=c("Paramètre d'echelle"="black", "Régression"="blue", "Prédiction"="orange"))+
+  facet_wrap(~portefeuille, ncol=2)+theme_actuariat()+
+  labs(x="Année", y="Paramètre d'echelle", title="Evolution du paramètre d'echelle")
+
+ggplotly(gg21)
+ggplotly(gg22)
+```
+
+### Modélisation des paramètres du portefeuille B
+
+Comme précisé précédemment, nous prendrons la moyenne des paramètres
+annuels de la loi gamma tronquée pour estimer les paramètres de cette
+loi pour modéliser les coûts sur l'année 2024.
+
+```{r}
+predictionB<-data.frame(annee=2024, forme=mean(parametreB_annee$forme), echelle=mean(parametreB_annee$echelle))
+
+gg23=ggplot(parametreB_annee, aes(x=annee, y=forme))+geom_line(aes(color="Paramètre de forme"))+geom_point(aes(color="Paramètre de forme"))+geom_point(data=predictionB, aes(x=annee, y=forme, color="Prédiction"))+scale_color_manual(name="Légende", values=c("Prédiction"="orange", "Paramètre de forme"="black"))+
+  labs(x="Année", y="Paramètre de forme (portefeuille B)", title="Evolution du paramètre de forme")
+gg24=ggplot(parametreB_annee, aes(x=annee, y=echelle))+geom_line(aes(color="Paramètre d'echelle"))+geom_point(aes(color="Paramètre d'echelle"))+geom_point(data=predictionB, aes(x=annee, y=echelle, color="Prédiction"))+scale_color_manual(name="Légende", values=c("Prédiction"="orange", "Paramètre d'echelle"="black"))+
+  labs(x="Année", y="Paramètre d'echelle (portefeuille B)", title="Evolution du paramètre d'echelle")
+
+ggplotly(gg23)
+ggplotly(gg24)
+```
+
+Nous allons maintenant déterminer le coefficient de régression, l'AIC et
+l'erreur résiduelle pour chaque portefeuille, afin de pouvoir déterminer
+la qualité des modèles ajustés.
+
+Le critère d'information d'Akaike (communément appelé AIC) est défini
+par : $$AIC=-2log\left(\tilde{L}\right)+2k$$ avec :
+
+-   $\tilde{L}$ la vraisemblance maximisée
+
+-   $k$ le nombre de paramètres dans le modèle
+
+Le modèle le plus adapté est celui qui a le plus faible AIC.
+
+L'erreur résiduelle d'une régression linéaire est la quantité
+$E_{r}$ dans l'expression d'une régression linéaire :
+$$Y=aX+b+E_{r}$$ avec :
+
+-   $Y$ la variable expliquée
+
+-   $X$ la variable explicative
+
+-   $a$ le coefficent de la régression (que l'on appellera Intercept),
+    et $b$ le paramètre de l'ordonnée à l'origine de la régression.
+
+Tout comme pour l'AIC, un modèle adapté a une erreur résiduelle faible.
+
+```{r}
+AIC_F_A<-AIC(forme_portA); AIC_E_A<-AIC(echelle_portA)
+AIC_F_C<-AIC(forme_portC); AIC_E_C<-AIC(echelle_portC)
+AIC_F_D<-AIC(forme_portD); AIC_E_D<-AIC(echelle_portD)
+
+sigma_F_A<-summary(forme_portA)$sigma; sigma_E_A<-summary(echelle_portA)$sigma
+sigma_F_C<-summary(forme_portC)$sigma; sigma_E_C<-summary(echelle_portC)$sigma
+sigma_F_D<-summary(forme_portD)$sigma; sigma_E_D<-summary(echelle_portD)$sigma
+
+intercept_F_A<-coef(forme_portA)[1]; intercept_E_A<-coef(echelle_portA)[1]
+intercept_F_C<-coef(forme_portC)[1]; intercept_E_C<-coef(echelle_portC)[1]
+intercept_F_D<-coef(forme_portD)[1]; intercept_E_D<-coef(echelle_portD)[1]
+
+resume_F_ACD<-data.frame(Portefeuille=c("A", "C", "D"),Intercept= c(intercept_F_A,intercept_F_C,intercept_F_D), Erreur_standard_résiduelle=c(sigma_F_A, sigma_F_C, sigma_F_D), AIC=c(AIC_F_A, AIC_F_C, AIC_F_D))
+kable(resume_F_ACD)
+resume_E_ACD<-data.frame(Portefeuille=c("A", "C", "D"),Intercept= c(intercept_E_A,intercept_E_C,intercept_E_D), Erreur_résiduelle=c(sigma_E_A, sigma_E_C, sigma_E_D), AIC=c(AIC_E_A, AIC_E_C, AIC_E_D))
+kable(resume_E_ACD)
+```
+
+Nous observons que les erreurs résiduelles sont proches de 0 pour les
+trois portefeuilles et les deux paramètres, et que l'AIC est négative
+pour les trois modèles, ce qui signifie que le pouvoir prédictif de nos
+modèles est très élevé.
+
+Maintenant que nous avons les paramètres de la loi de coût pour l'année
+2024 pour chaque portefeuille, nous pouvons estimer l'espérance, la
+variance et la value at risk de la charge de sinistre pour l'année 2024.
+
+# Estimation de l'espérance, de la variance et de la $VaR_{1\%}$ de la charge totale sur l'année 2024
+
+L'objectif de cette partie est de modéliser, pour la charge totale des
+sinistres en 2024 (nous appellerons cette variable aléatoire $S_{i}$,
+avec $i=A,B,C,D$), les grandeurs suivantes :
+
+-   $\mathbb{E}\left(S_{i}\right)$,
+
+-   $\mathbb{V}\left(S_{i}\right)$,
+
+-   $VaR_{1\%}(S_{i})$
+
+**Modèle collectif pour la charge de sinistres**
+
+La charge totale $S$ est donnée par : $$ S = \sum_{i=1}^{N} X_i $$ où
+$X_1, X_2, \ldots$ sont des variables aléatoires i.i.d. suivant la même
+loi qu'une variable aléatoire $X$, et $N$ est une variable aléatoire à
+valeurs dans $\mathbb{N}$ indépendante de la suite $(X_i)_{i\geq1}$.
+
+Nous disposons, grâce à nos estimations de la loi de fréquence et de la
+loi de coûts, de différentes méthodes pour modéliser ces grandeurs.
+
+Dans nos simulations, nous faisons le choix d'accorder un poids
+équivalent pour chaque année de sinistralité. Nous aurions pu choisir
+des poids différents pour chaque année, avec par exemple un poids plus
+important sur les années proches. Cependant, n'ayant pas plus
+d'informations sur le portefeuille, nous ne pouvons pas faire un tel
+choix.
+
+L'idée d'attribuer des poids différents aux années en fonction de leur
+proximité dans le temps peut sembler judicieuse, car les années récentes
+peuvent être considérées comme plus représentatives des conditions
+actuelles. Cependant, pour prendre une telle décision de manière
+éclairée, il faudrait disposer d'informations supplémentaires sur le
+portefeuille d'assurance et sur les tendances historiques des sinistres.
+Sans ces informations, il est difficile de justifier l'attribution de
+poids différents aux différentes années. Par conséquent, nous optons
+pour l'accord d'un poids équivalent à chaque année dans nos simulation.
+
+## Estimation mathématique
+
+La première méthode que nous pouvons utiliser pour calculer ces valeurs
+est d'effectuer le produit des deux lois (fréquence et coûts des
+sinistres), afin de calculer ensuite les valeurs.
+
+La charge totale de sinistres peut s'écrire comme la somme de
+réalisation de la variable des coûts de sinitres, de 1 à $N$ avec $N$ la
+variable aléatoire représentant la fréquence des sinistres.
+
+Notons $X$ la variable aléatoire représentant le coût d'un sinistre, et
+$N$ la variable aléatoire représentant la fréquence des sinistres.
+
+D'après le théorème de Wald (voir en annexe), nous avons :
+
+$$\mathbb{E}\left(\sum_{n=1}^{N} X_{n}\right)=\mathbb{E}(N)\times \mathbb{E}(X)$$
+
+Nous avons donc :
+$$\mathbb{E}(S_{i})=\mathbb{E}(N_{i})\times \mathbb{E}(X_{i})$$ Nous
+pouvons donc calculer l'espérance, la variance et la $VaR_{1\%}$ de la
+charge de sinistres pour les quatre portefeuilles :
+
+La variance est elle donnée par la formule suivante :
+$$\mathbb{V}(S)=\mathbb{E}(N)\times\sigma(X)^{2}+\mathbb{E}(X)^{2}\times\sigma(N)^{2}$$
+
+La "value-at-risk", notée $VaR$, de niveau de risque $\alpha\in]0,1[$
+associée à $X$ est le quantile suivant :
+$$VaR_{\alpha}(X)=F^{[-1]}_{X}(1-\alpha)$$
+
+Elle représente le seuil minimal de perte à envisager au niveau de
+risque $\alpha$. Nous pouvons donc la réécrire comme le minimum de $t$
+tel que $\mathbb{P}(X>t)\le \alpha$. Etant donné que nous ne connaissons
+pas la loi de la charge totale des sinistres pour l'année 2024, nous ne
+pouvons pas calculer mathématiquement la $VaR$.
+
+Nous avons donc, en appliquant cette méthode, les statistiques suivantes
+:
+
+```{r}
+xA<-seq(minA, max(portA$cout), by=1)
+densA2024<-dgamma_tronquee(xA, forme=forme_estimeeA, echelle=echelle_estimeeA, seuil=min(xA))
+espA<-sum(xA*densA)*combined_data_all$Moyenne[1]; varA<-sum(densA*xA^2)*combined_data_all$Moyenne[1]+combined_data_all$Variance[1]*espA^2
+espA<-espA*100000
+varA<-varA*100000
+
+xB<-seq(minB, max(portB$cout), by=1)
+densB2024<-dgamma_tronquee(xB, forme=forme_estimeeB, echelle=echelle_estimeeB, seuil=min(xB))
+espB<-sum(xB*densB)*combined_data_all$Moyenne[2]; varB<-sum(densB*xB^2)*combined_data_all$Moyenne[2]+combined_data_all$Variance[2]*espB^2
+espB<-espB*100000
+varB<-varB*100000
+
+xC<-seq(minC, max(portC$cout), by=1)
+densC2024<-dgamma_tronquee(xC, forme=forme_estimeeC, echelle=echelle_estimeeC, seuil=min(xC))
+espC<-sum(xC*densC)*combined_data_all$Moyenne[3]; varC<-sum(densC*xC^2)*combined_data_all$Moyenne[3]+combined_data_all$Variance[3]*espC^2
+espC<-espC*100000
+varC<-varC*100000
+
+xD<-seq(minD, max(portD$cout), by=1)
+densD2024<-dgamma_tronquee(xD, forme=forme_estimeeD, echelle=echelle_estimeeD, seuil=min(xD))
+espD<-sum(xD*densD)*combined_data_all$Moyenne[4]; varD<-sum(densD*xD^2)*combined_data_all$Moyenne[4]+combined_data_all$Variance[4]*espD^2
+espD<-espD*100000
+varD<-varD*100000
+
+recap<-data.frame(Portefeuille=c("A", "B", "C", "D"), Espérances=c(espA, espB, espC, espD), Variances=c(varA, varB, varC, varD), Ecarts_types=c(sqrt(varA), sqrt(varB), sqrt(varC), sqrt(varD)))
+kable(recap)
+```
+
+## Estimation de l'espérance, variance et VaR1% avec la méthode de Monte Carlo
+
+La méthode de Monte Carlo est une technique statistique se basant sur
+les résultats de la loi grands nombres.
+
+**Loi(s) des grands nombres**
+
+On considère une suite de variables aléatoires réelles
+$X_1, X_2, \ldots$ avec les hypothèses suivantes :
+
+1.  $X_1, X_2, \ldots$ sont globalement indépendantes;
+
+2.  $X_1, X_2, \ldots$ sont identiquement distribuées; on notera alors
+    $X$ une v.a. telle que $\text{Loi}(X_i) = \text{Loi}(X)$ pour tout
+    $i$;
+
+3.  l'espérance de $X$ est bien définie et finie, c'est-à-dire
+    $E(|X|) < +\infty$.
+
+Pour tout $n \geq 1$, on pose $S_n$ défini par
+$S_n = X_1 + \ldots + X_n$.
+
+On a alors les deux résultats suivants. D'une part, la loi "faible" des
+grands nombres :
+$$ \text{LfGN : } \frac{S_n}{n} \xrightarrow[n \to +\infty]{P} E(X) $$
+
+Il suffit donc de simuler un grands nombres de fois pour obtenir la
+moyenne de la population.
+
+## Méthode de Monte Carlo sans projection de la sinistralité et retraitement des années exceptionnelles
+
+La méthode retenue consiste à effectuer des tirages aléatoires selon les
+années et à calculer les différents paramètres en fonction de la
+distribution de cette année-là, puis à simuler une distribution avec le
+paramètre estimé.
+
+Nous pouvons le faire car nous avons constaté qu'au vu de la taille de
+l'échantillon, l'incertitude quant à l'estimation du paramètre est très
+faible.
+
+```{r}
+simule_gamma_tronquee <- function(forme, echelle, seuil, nb_simu) {
+  k <- 1  
+  simulation_port <- numeric(nb_simu)  
+  
+  while (k <= nb_simu) {
+    simulation <- rgamma(1, shape = forme, rate = echelle)
+    if (simulation > seuil) {
+      simulation_port[k] <- simulation
+      k <- k + 1
+    }
+  }
+  return(simulation_port)
+}
+```
+
+```{r}
+parametre_cout <- parametre_annee %>%
+  mutate(minimum = case_when(
+    portefeuille == "Portefeuille A" ~ min(portA$cout),
+    portefeuille == "Portefeuille B" ~ min(portB$cout),
+    portefeuille == "Portefeuille C" ~ min(portC$cout),
+    portefeuille == "Portefeuille D" ~ min(portD$cout)
+  ))
+portefeuille_nom="Portefeuille C"
+montecarlo_portefeuille <- function(portefeuille_nom) {
+  annee_frequence=sample(2019:2023,1)
+  annee_cout=sample(2019:2023,1)
+  parametre_frequence=combined_data_1%>%
+    filter(annee==annee_frequence,Portefeuille==portefeuille_nom)%>%
+    select(Moyenne)
+  nb_sinistre=rpois(1, as.numeric(parametre_frequence)*100000)
+  param_gamma=parametre_cout%>%filter(annee==annee_cout,portefeuille==portefeuille_nom)
+  charge_total=sum(simule_gamma_tronquee(nb_simu=nb_sinistre,forme=param_gamma$forme,echelle=param_gamma$echelle,seuil=param_gamma$minimum))
+  return(charge_total)
+}
+
+```
+
+```{r}
+# Calculer les résultats pour chaque portefeuille
+resultat_montecarlo_a <- unlist(lapply(1:N, function(i) montecarlo_portefeuille("Portefeuille A")))
+resultat_montecarlo_b <- unlist(lapply(1:N, function(i) montecarlo_portefeuille("Portefeuille B")))
+resultat_montecarlo_c <- unlist(lapply(1:N, function(i) montecarlo_portefeuille("Portefeuille C")))
+resultat_montecarlo_d <- unlist(lapply(1:N, function(i) montecarlo_portefeuille("Portefeuille D")))
+
+# Créer un data frame pour les résultats de chaque portefeuille
+resultats <- data.frame(
+  Portefeuille = rep(c("Portefeuille A", "Portefeuille B", "Portefeuille C", "Portefeuille D"), each = N),
+  Charge_simule = c(resultat_montecarlo_a, resultat_montecarlo_b, resultat_montecarlo_c, resultat_montecarlo_d)
+)
+
+# Créer un histogramme facet_wrap pour chaque portefeuille
+histogramme <- ggplot(resultats, aes(x = Charge_simule,fill = Portefeuille)) +
+  geom_histogram() +
+  facet_wrap(~Portefeuille) +
+  theme_actuariat() +
+  scale_fill_manual(values = palette_actuariat)+labs(x="Charge simulée", title="Distribution des charges totales estimées")
+
+# Afficher l'histogramme
+ggplotly(histogramme)
+```
+
+```{r}
+histogramme <- ggplot(resultats, aes(x = Portefeuille, y = Charge_simule, fill = Portefeuille)) +
+  geom_boxplot() +  # Utiliser geom_boxplot() pour créer un boxplot
+  theme_actuariat() +
+  scale_fill_manual(values = palette_actuariat) +
+  labs(x = "Portefeuille", y = "Charge simulée", title = "Distribution des charges totales estimées") +
+  ylim(4600000, 7000000) # Utiliser ylim() pour définir la limite sur l'axe y
+# Afficher le boxplot
+ggplotly(histogramme)
+```
+
+### Portefeuille A {.unnumbered}
+
+Le résultat suivant n'est pas étonnant : les paramètres utilisés pour
+simuler le nombre de sinistres ne varient pas beaucoup d'une année à
+l'autre, ce qui induit une certaine stabilité. Cette stabilité se
+reflète par un écart-type peu élevé entre les charges simulées, et la
+VaR à 1 % n'est également pas très éloignée de l'espérance. La méthode
+de Monte-Carlo semble fournir des estimations exploitables pour ce
+portefeuille.
+
+Graphiquement, on constate que ce portefeuille bénéficie d'un écart-type
+plutôt bas, ce qui se traduit par un faible étalement de l'histogramme.
+
+De plus, le graphique ci-dessus représente les résultats issus du
+théorème central limite, permettant de conclure que la distribution de
+la moyenne des estimations tend vers une loi normale, avec un paramètre
+$\frac{\sigma^2}{n}$. En conséquence, nous pouvons facilement comprendre
+que le portefeuille ne présente pas de tendance particulière ni d'années
+exceptionnelles.
+
+### Portefeuille B {.unnumbered}
+
+Le résultat pour le portefeuille B est intéressant à examiner. Comparé
+au portefeuille A, il présente une espérance plus élevée et une variance
+légèrement supérieur, ce qui se traduit par un écart-type également plus
+haut. La VaR à 1 % est également plus élevée que celle du portefeuille
+A.
+
+Le graphique semble révéler une asymétrie, avec un skew qui se dirige
+vers la droite. Cette asymétrie peut expliquer pourquoi la VaR 1 % est
+bien plus élevée que l'espérance. En d'autres termes, il existe une
+probabilité plus élevée que les pertes soient plus importantes que prévu
+dans le scénario le plus pessimiste.
+
+Le portefeuille B apparaît donc comme étant plus volatile que le
+portefeuille A, avec une espérance plus élevée mais également un risque
+accru. Ces caractéristiques soulignent l'importance d'une gestion
+attentive des risques pour ce portefeuille.
+
+### Portefeuille C {.unnumbered}
+
+Le portefeuille C présente des caractéristiques distinctes par rapport
+aux portefeuilles A et B. Son espérance est légèrement inférieure à
+celle des autres portefeuilles, tandis que sa variance est nettement
+plus élevée, ce qui se traduit par un écart-type considérablement plus
+important. La VaR à 1 % est également plus élevée, indiquant un niveau
+de risque potentiellement plus élevé.
+
+Graphiquement, nous observons deux distributions distinctes. Une
+distribution semble avoir une amplitude relativement faible, tandis que
+l'autre est plus étalée. Cette différence peut être attribuée à la
+présence d'une année exceptionnelle dans les données. Il est donc
+envisageable que l'exclusion de cette année pourrait conduire à une
+distribution moins influencée par des événements exceptionnels, ce qui
+pourrait être bénéfique pour une analyse plus stable des risques.
+
+En résumé, le portefeuille C présente des caractéristiques spécifiques
+qui nécessitent une attention particulière en matière de gestion des
+risques. L'identification et l'exclusion des années exceptionnelles
+pourraient contribuer à améliorer la fiabilité des estimations et à
+mieux appréhender le niveau de risque associé à ce portefeuille. C'est
+que nous verrons par la suite.
+
+### Portefeuille D {.unnumbered}
+
+Le portefeuille D se distingue des autres portefeuilles par plusieurs
+aspects. Bien que son espérance soit similaire à celle des autres
+portefeuilles, sa variance est nettement plus élevée, ce qui se traduit
+par un écart-type considérablement plus important. La VaR à 1 % est
+également élevée, suggérant un niveau de risque potentiellement plus
+élevé.
+
+Graphiquement, l'histogramme présente une dispersion importante des
+données, suggérant une volatilité plus élevée dans les charges simulées
+pour ce portefeuille.
+
+Cependant, il est important de noter que la distribution ne semble pas
+être asymétrique, ce qui signifie que le portefeuille D peut être moins
+risqué que le portefeuille B (par exemple), malgré une variance plus
+grande et une espérance à peu près équivalente.
+
+En résumé, le portefeuille D présente des caractéristiques spécifiques
+qui nécessitent une attention particulière en matière de gestion des
+risques, notamment en raison de sa variance élevée et de son niveau de
+VaR plus important.
+
+```{r}
+# Créer un tableau avec les statistiques pour chaque portefeuille
+tableau <- data.frame(
+  Portefeuille = c("Portefeuille A", "Portefeuille B", "Portefeuille C", "Portefeuille D"),
+  Esperance = c(mean(resultat_montecarlo_a), mean(resultat_montecarlo_b), mean(resultat_montecarlo_c), mean(resultat_montecarlo_d)),
+  Variance = c(var(resultat_montecarlo_a), var(resultat_montecarlo_b), var(resultat_montecarlo_c), var(resultat_montecarlo_d)),Ecart_type=c(sd(resultat_montecarlo_a), sd(resultat_montecarlo_b), sd(resultat_montecarlo_c), sd(resultat_montecarlo_d)),
+  VaR1 = c(quantile(resultat_montecarlo_a, 0.99), quantile(resultat_montecarlo_b, 0.99), quantile(resultat_montecarlo_c, 0.99), quantile(resultat_montecarlo_d, 0.99))
+)
+
+# Afficher le tableau
+kable(tableau, caption = "Résultats des distributions pour chaque portefeuille")
+```
+
+## Méthode historique de simulation de l'espérance, de la variance et de la $VaR_{1\%}$
+
+Dans cette partie, nous faisons l'hypothèse que l'historique des années
+est totalement représentatif de ce qui se passera l'année suivante. La
+méthode utilisée consiste à tirer deux années aléatoires. Ensuite, nous
+rééchantillonnons l'année choisie pour la fréquence à l'aide de la
+méthode bootstrap. Ce procédé nous permet de refléter l'indépendance
+entre la loi du coût et la loi de fréquence.
+
+Une approche Bootstrap se déroule en deux étapes :
+
+1.  On approxime premièrement la loi inconnue $P$ par la loi empirique
+    $P_n$ de l'échantillon, ici l'année tirée aléatoirement.
+
+2.  On génère ensuite un grand nombre $B$ d'échantillons suivant $P_n$,
+    appelés échantillons bootstrap. On obtient autant d'estimations de
+    la grandeur d'intérêt, et leur loi empirique est utilisée pour
+    approximer la loi de $T$.
+
+Le prix de cette méthode est qu'on simule suivant la loi $P_n$ plutôt
+que suivant la loi $P$.
+
+Ensuite avec la deuxième année tirée, nous allons effectuer des tirages
+aléatoires dans la distribution de cette années jusqu'à obtenir le
+nombre de sinistre donné par le premier tirage.
+
+Les avantages de cette méthodes sont que l'on ne pose pas d'hypothèse
+sur le type de la loi de la population et que tout estimateur $T$ peut
+être traité, quel que soit sa complexité.
+
+Les limites de cette méthodes sont que cette approche cumule deux
+approximations successives (remplacer $P$ par $P_n$ puis remplacer la
+loi de $T$ sous $P_n$ par la loi empirique de $B$ tirages) et que l'on
+peut difficilement borner l'erreur faite en fonction de $B$ et $n$ .
+
+Nous faisons le choix de simuler 1000 réalisations pour chaque
+portefeuille afin de ne pas trop allonger le temps de calcul.
+
+```{r}
+bootstrap_portefeuille <- function(portefeuille_nom) {
+  annee_frequence <- sample(2019:2023, 1)
+  annee_cout <- sample(2019:2023, 1)
+  
+  # Filtrage des données pour l'année de fréquence
+  echantillon_annee <- switch(portefeuille_nom,
+                              "Portefeuille A" = a %>% filter(annee == annee_frequence),
+                              "Portefeuille B" = b %>% filter(annee == annee_frequence),
+                              "Portefeuille C" = c %>% filter(annee == annee_frequence),
+                              "Portefeuille D" = d %>% filter(annee == annee_frequence))
+  
+  # Échantillonnage du nombre de sinistres
+  echantillon_sinistre <- sample(echantillon_annee$nombre_sinistres, 100000, replace = TRUE)
+  nombre_sinistre <- sum(echantillon_sinistre)
+  
+  # Filtrage des données pour l'année de coût
+  echantillon_annee_cout <- switch(portefeuille_nom,
+                                   "Portefeuille A" = portA %>% filter(annee == annee_cout),
+                                   "Portefeuille B" = portB %>% filter(annee == annee_cout),
+                                   "Portefeuille C" = portC %>% filter(annee == annee_cout),
+                                   "Portefeuille D" = portD %>% filter(annee == annee_cout))
+  
+  # Échantillonnage du coût des sinistres
+  echantillon_cout <- sample(echantillon_annee_cout$cout, nombre_sinistre, replace = TRUE)
+  charge_total <- sum(echantillon_cout)
+  
+  return(charge_total)
+}
+```
+
+```{r}
+# Calculer les résultats pour chaque portefeuille
+resultat_bootstrap_a <- unlist(lapply(1:N, function(i) bootstrap_portefeuille("Portefeuille A")))
+resultat_bootstrap_b <- unlist(lapply(1:N, function(i) bootstrap_portefeuille("Portefeuille B")))
+resultat_bootstrap_c <- unlist(lapply(1:N, function(i) bootstrap_portefeuille("Portefeuille C")))
+resultat_bootstrap_d <- unlist(lapply(1:N, function(i) bootstrap_portefeuille("Portefeuille D")))
+
+# Créer un data frame pour les résultats de chaque portefeuille
+resultats <- data.frame(
+  Portefeuille = rep(c("Portefeuille A", "Portefeuille B", "Portefeuille C", "Portefeuille D"), each = N),
+  Charge_simule = c(resultat_bootstrap_a, resultat_bootstrap_b, resultat_bootstrap_c, resultat_bootstrap_d)
+)
+
+# Créer un histogramme facet_wrap pour chaque portefeuille
+histogramme <- ggplot(resultats, aes(x = Charge_simule,fill = Portefeuille)) +
+  geom_histogram() +
+  facet_wrap(~Portefeuille) +
+  theme_actuariat() +
+  scale_fill_manual(values = palette_actuariat)+labs(x="Charge simulée", title="Distribution des charges totales estimées")
+
+# Afficher l'histogramme
+ggplotly(histogramme)
+```
+
+```{r}
+histogramme <- ggplot(resultats, aes(x = Portefeuille, y = Charge_simule, fill = Portefeuille)) +
+  geom_boxplot() +  # Utiliser geom_boxplot() pour créer un boxplot
+  theme_actuariat() +
+  scale_fill_manual(values = palette_actuariat) +
+  labs(x = "Portefeuille", y = "Charge simulée", title = "Distribution des charges totales estimées") +
+  ylim(4600000, 7000000) # Utiliser ylim() pour définir la limite sur l'axe y
+# Afficher le boxplot
+ggplotly(histogramme)
+```
+
+La méthode historique associée à un échantillonnage bootstrap est une
+approche très intéressante dans ce cas. En effet, cela nous permet de
+mélanger les différentes distributions des échantillons de fréquence et
+de coût pour chaque portefeuille, ce qui prend en compte les phénomènes
+potentiels propres à chaque année de sinistralité pour chaque
+portefeuille.
+
+Nous observons une certaine similitude avec la méthode de Monte Carlo,
+ce qui suggère que les lois que nous avons estimées sont plutôt proches
+des lois réelles de chaque portefeuille.
+
+Cependant, la méthode historique, comme son nom l'indique, est limitée
+par le nombre de données, car les cinq années considérées peuvent ne pas
+être représentatives des phénomènes évolutifs du portefeuille, avec des
+évolutions annuelles de sinistralité et un mix d'assurés qui peut varier
+d'une année à l'autre. Par conséquent, ces estimations sont plutôt
+limitées, même si elles sont basées sur des données historiques et
+suivent les distributions historiques.
+
+### Portefeuille A {.unnumbered}
+
+Pour le portefeuille A, une observation similaire à celle faite avec la
+méthode de Monte Carlo se dégage : une stabilité apparente autour de la
+moyenne. Cette stabilité se manifeste graphiquement par un histogramme
+resserré et solidement centré autour de sa moyenne. Ce constat n'est pas
+surprenant étant donné la régularité des paramètres au fil du temps. En
+effet, cette constance se traduit par une valeur à risque (VaR) proche
+de la moyenne et un écart type relativement modeste comparé aux autres
+portefeuilles.
+
+L'application de la méthode bootstrap sur les données historiques
+annuelles conduit à des conclusions similaires à celles de la méthode de
+simulation visant à modéliser les lois pour ce portefeuille.
+
+Cependant, tout comme avec la méthode de simulation, l'absence de
+traitement des années exceptionnelles ainsi que la négligence de toute
+visualisation ou projection de tendance constituent les principales
+lacunes de cette approche.
+
+### Portefeuille B {.unnumbered}
+
+La méthode historique-bootstrap, ainsi que la méthode de Monte-Carlo,
+révèlent une distribution asymétrique des sinistres, comme le montre
+clairement le graphique. Cette asymétrie, inclinée vers la droite, se
+traduit par une valeur à risque (VaR) plus élevée par rapport à son
+espérance. Cette observation souligne le fait que ce portefeuille
+présente un niveau de risque plus élevé, pouvant parfois exhiber une
+sinistralité plus importante que prévu.
+
+Il est crucial de comprendre pourquoi cette distribution asymétrique
+conduit à une VaR plus élevée. En effet, cette asymétrie implique que
+les sinistres les plus extrêmes sont plus fréquents que ce l'on pourrait
+attendre dans une distribution normale, ce qui augmente la probabilité
+de dépasser la VaR.
+
+De plus, l'analyse de la variabilité met en lumière l'importance de ne
+pas se limiter à examiner seulement la variance de la charge, mais aussi
+la répartition de cette variabilité. Dans cette optique, l'utilisation
+d'indicateurs tels que le ratio de Sortino, qui mettent en relief
+uniquement la variance positive, pourrait être pertinent pour comparer
+les portefeuilles et prendre en compte les variations dans la partie
+droite de la distribution.
+
+En conclusion, cette analyse souligne la nécessité d'accorder une
+attention particulière à ce portefeuille en raison de ses
+caractéristiques de charge spécifiques, et invite à envisager des
+stratégies de gestion du risque adaptées pour atténuer les conséquences
+potentielles des sinistres extrêmes.
+
+### Portefeuille C {.unnumbered}
+
+Le portefeuille C requiert une attention particulière, car il exhibe la
+plus grande volatilité lorsqu'il est simulé à l'aide des données
+historiques.
+
+Malgré ce qui pourrait sembler à première vue une faible sinistralité,
+une simple analyse de l'espérance pourrait induire en erreur quant à la
+véritable nature du portefeuille. En réalité, ce portefeuille présente
+la plus grande valeur à risque (VaR) et variance. Ces observations
+s'expliquent principalement par une année exceptionnellement basse en
+sinistralité. L'analyse graphique souligne clairement une concentration
+des sinistres autour de valeurs supérieures à 6 millions. Ainsi,
+l'exclusion de cette année lors des simulations devient cruciale pour
+obtenir des résultats plus fiables.
+
+Cependant, la modélisation basée sur les tirages des données historiques
+montre ses limites dans ce cas également. En effet, cette approche ne
+permet pas de prendre en compte les évolutions et tendances spécifiques
+du portefeuille au fil du temps, ce qui réduit sa capacité à capturer
+toute la complexité de la situation.
+
+En conclusion, le portefeuille C requiert une attention particulière en
+raison de sa volatilité élevée, soulignant ainsi l'importance de
+méthodologies plus sophistiquées pour une analyse plus précise et
+robuste.
+
+### Portefeuille D {.unnumbered}
+
+Pour le portefeuille D, nous observons des résultats similaires à ceux
+obtenus avec la méthode de Monte Carlo sans retraitement. Ce
+portefeuille se caractérise par une certaine volatilité, comme le
+suggère son écart-type relativement élevé. Cependant, contrairement aux
+autres portefeuilles (B et C), sa distribution semble plus symétrique,
+ce qui indique un équilibre entre les charges au-desus et en dessous de
+l'espérance.
+
+En examinant les mesures de risque, nous constatons que la valeur à
+risque (VaR) pour ce portefeuille est relativement élevée mais reste
+plutôt proche de l'espérance.
+
+En conclusion, le portefeuille D présente une volatilité significative,
+mais sa distribution relativement symétrique en fait un portefeuille
+équilibré, bien qu'il demeure exposé à un risque notable.
+
+```{r}
+# Créer un tableau avec les statistiques pour chaque portefeuille
+tableau <- data.frame(
+  Portefeuille = c("Portefeuille A", "Portefeuille B", "Portefeuille C", "Portefeuille D"),
+  Esperance = c(mean(resultat_bootstrap_a), mean(resultat_bootstrap_b), mean(resultat_bootstrap_c), mean(resultat_bootstrap_d)),
+  Variance = c(var(resultat_bootstrap_a), var(resultat_bootstrap_b), var(resultat_bootstrap_c), var(resultat_bootstrap_d)),Ecart_type=c(sd(resultat_bootstrap_a), sd(resultat_bootstrap_b), sd(resultat_bootstrap_c), sd(resultat_bootstrap_d)),
+  VaR1 = c(quantile(resultat_bootstrap_a, 0.99), quantile(resultat_bootstrap_b, 0.99), quantile(resultat_bootstrap_c, 0.99), quantile(resultat_bootstrap_d, 0.99))
+)
+
+# Afficher le tableau
+kable(tableau, caption = "Résultats des distributions pour chaque portefeuille")
+```
+
+## Méthode de Monte Carlo avec projection de la sinistralité et retraitement des années exceptionnelles
+
+Les données de simulation utilisées ici sont celles que nous avons
+décidées suite à notre analyse du portefeuille et de ses tendances.
+
+Pour la fréquence, voici les paramètres utilisés pour la simulation de
+la loi de Poisson :
+
+```{r}
+parametre_frequence_donnee=c(mean(a$nombre_sinistre),mean(b$nombre_sinistre),mean(c_without_2021$nombre_sinistres),predictions_suivantes/100000)
+portefeuille=c("Portefeuille A","Portefeuille B","Portefeuille C","Portefeuille D")
+param_frequence <- data.frame(portefeuille, Parametre=parametre_frequence_donnee)
+
+kable(param_frequence)
+```
+
+Et pour le coût, voici les paramètres utilisés pour la simulation de la
+loi Gamma tronquée :
+
+```{r}
+predictionB$portefeuille="Portefeuille B"
+parametre_cout=rbind(predictionACD,predictionB)
+parametre_cout <- parametre_cout %>%
+  mutate(minimum = case_when(
+    portefeuille == "Portefeuille A" ~ min(portA$cout),
+    portefeuille == "Portefeuille B" ~ min(portB$cout),
+    portefeuille == "Portefeuille C" ~ min(portC$cout),
+    portefeuille == "Portefeuille D" ~ min(portD$cout)
+  ))
+
+kable(parametre_cout)
+```
+
+```{r}
+predictionB$portefeuille="Portefeuille B"
+parametre_cout=rbind(predictionACD,predictionB)
+parametre_cout <- parametre_cout %>%
+  mutate(minimum = case_when(
+    portefeuille == "Portefeuille A" ~ min(portA$cout),
+    portefeuille == "Portefeuille B" ~ min(portB$cout),
+    portefeuille == "Portefeuille C" ~ min(portC$cout),
+    portefeuille == "Portefeuille D" ~ min(portD$cout)
+  ))
+
+
+montecarlo_portefeuille_projete <- function(portefeuille_nom) {
+  parametre_frequence=param_frequence%>%filter(portefeuille==portefeuille_nom)
+  nb_sinistre=rpois(1, parametre_frequence$Parametre*100000)
+  
+  param_gamma=parametre_cout%>%filter(portefeuille==portefeuille_nom)
+  
+  charge_total=sum(simule_gamma_tronquee(nb_simu=nb_sinistre,forme=param_gamma$forme,echelle=param_gamma$echelle,seuil=param_gamma$minimum))
+  return(charge_total)
+}
+
+
+```
+
+```{r}
+resultat_montecarlo_projete_a <- unlist(lapply(1:N, function(i) montecarlo_portefeuille_projete("Portefeuille A")))
+resultat_montecarlo_projete_b <- unlist(lapply(1:N, function(i) montecarlo_portefeuille_projete("Portefeuille B")))
+resultat_montecarlo_projete_c <- unlist(lapply(1:N, function(i) montecarlo_portefeuille_projete("Portefeuille C")))
+resultat_montecarlo_projete_d <- unlist(lapply(1:N, function(i) montecarlo_portefeuille_projete("Portefeuille D")))
+
+# Créer un data frame pour les résultats de chaque portefeuille
+resultats_projete <- data.frame(
+  Portefeuille = rep(c("Portefeuille A", "Portefeuille B", "Portefeuille C", "Portefeuille D"), each = N),
+  Charge_simule = c(resultat_montecarlo_projete_a, resultat_montecarlo_projete_b, resultat_montecarlo_projete_c, resultat_montecarlo_projete_d)
+)
+
+# Créer un histogramme facet_wrap pour chaque portefeuille
+histogramme <- ggplot(resultats_projete, aes(x = Charge_simule,fill = Portefeuille)) +
+  geom_histogram() +
+  facet_wrap(~Portefeuille) +
+  theme_actuariat() +
+  scale_fill_manual(values = palette_actuariat)+labs(x="Charge simulée", title="Distribution des charges totales estimées")
+
+# Afficher l'histogramme
+ggplotly(histogramme)
+```
+
+```{r}
+histogramme <- ggplot(resultats, aes(x = Portefeuille, y = Charge_simule, fill = Portefeuille)) +
+  geom_boxplot() +  # Utiliser geom_boxplot() pour créer un boxplot
+  theme_actuariat() +
+  scale_fill_manual(values = palette_actuariat) +
+  labs(x = "Portefeuille", y = "Charge simulée", title = "Distribution des charges totales estimées") +
+  ylim(4600000, 7000000) 
+# Afficher le boxplot
+ggplotly(histogramme)
+```
+
+La méthode de Monte Carlo, avec ses divers retraitements, semble être la
+méthode la plus prudente et représentative du scénario le plus probable,
+à savoir une année représentative de la sinistralité de chaque
+portefeuille.
+
+Cette approche conduit à des distributions assez classiques, lissant
+ainsi les phénomènes plus aléatoires.
+
+Pour être plus concret, pour chaque portefeuille, les paramètres de la
+loi Gamma tronquée sont projetés à l'aide d'une régression, ce qui
+permet de refléter les tendances à la hausse ou à la baisse des coûts
+moyens. En ce qui concerne la fréquence, l'année exceptionnelle est
+exclue de la simulation afin de ne pas sous-estimer la sinistralité
+moyenne du portefeuille. Les portefeuilles A et B présentent une
+fréquence relativement stable, de sorte que la modélisation reflète
+l'ensemble des années. Enfin, pour le portefeuille D, l'évolution
+positive puis décroissante est projetée pour l'année 2024.
+
+### Portefeuille A {.unnumbered}
+
+Les retraitements ne donne pas de résultats très différents pour le
+portefeuille A, la stabilité de ce portefeuille est encore visible
+graphiquement, l'écart type plutot faible est aussi reflété. Cependant,
+on constate graphiquement que le portefeuille n'est finalement pas
+beaucoup moins volatile après les différents retraitements.
+
+### Portefeuille B {.unnumbered}
+
+Le portefeuille B, après les retraitements, semble ne plus présenter
+d'asymétrie. Cette observation est visible à la fois graphiquement et
+par une réduction de la différence entre la valeur à risque (VaR) et
+l'espérance de sinistralité.
+
+Il est donc possible que le portefeuille B ne nécessite pas une
+attention particulière quant aux variations positives de la charge
+sinistre.
+
+La variance du portefeuille se rapproche de celle du portefeuille A, ce
+qui suggère que nous pouvons finalement le traiter de la même manière
+que ce dernier. En définitive, le portefeuille B ne présente pas une
+grande variabilité, contrairement à ce que l'on aurait pu penser en se
+basant sur les simulations historiques.
+
+### Portefeuille C {.unnumbered}
+
+Avec les retraitements, le portefeuille C devient moins volatile ;
+cependant, son espérance de sinistralité augmente considérablement. En
+comparaison avec les données historiques, la sinistralité augmente de
+plus d'un million.
+
+La VaR ne change pas significativement, ce phénomène n'est pas
+surprenant car la sinistralité autour de cette VaR était également
+présente dans les autres simulations. En effet, la sinistralité de ce
+portefeuille n'est pas nécessairement très volatile en dehors de l'année
+présentant une fréquence de sinistralité très faible.
+
+### Portefeuille D {.unnumbered}
+
+Le portefeuille D est celui qui subit les plus grands changements suite
+à la projection, notamment en raison de la tendance à l'augmentation de
+la fréquence des sinistres. Il est crucial de prendre en considération
+les particularités de ce portefeuille afin de ne pas sous-estimer sa
+sinistralité. Une modélisation prenant en compte ces aspects est
+nécessaire, car en ignorant l'évolution de la sinistralité, nous
+obtenons une espérance de sinistralité considérablement différente, avec
+une différence de près de 1 million.
+
+Les résultats obtenus, en particulier en ce qui concerne l'espérance,
+mettent en évidence l'importance de prendre en compte l'évolution
+temporelle du portefeuille. Comme pour les autres portefeuilles, sa
+volatilité diminue.
+
+En conclusion, les retraitements et la projection de l'évolution des
+paramètres sont cruciaux pour modéliser ce portefeuille. En effet, la
+composition du portefeuille a pu évoluer au cours des 5 dernières
+années, ce qui nécessite une projection de la sinistralité en tenant
+compte de cette nouvelle composition.
+
+```{r}
+# Créer un tableau avec les statistiques pour chaque portefeuille
+tableau_projete <- data.frame(
+  Portefeuille = c("Portefeuille A", "Portefeuille B", "Portefeuille C", "Portefeuille D"),
+  Esperance = c(mean(resultat_montecarlo_projete_a), mean(resultat_montecarlo_projete_b), mean(resultat_montecarlo_projete_c), mean(resultat_montecarlo_projete_d)),
+  Variance = c(var(resultat_montecarlo_projete_a), var(resultat_montecarlo_projete_b), var(resultat_montecarlo_projete_c), var(resultat_montecarlo_projete_d)),Ecart_type=c(sd(resultat_montecarlo_projete_a), sd(resultat_montecarlo_projete_b), sd(resultat_montecarlo_projete_c), sd(resultat_montecarlo_projete_d)),
+  VaR1 = c(quantile(resultat_montecarlo_projete_a, 0.99), quantile(resultat_montecarlo_projete_b, 0.99), quantile(resultat_montecarlo_projete_c, 0.99), quantile(resultat_montecarlo_projete_d, 0.99))
+)
+
+# Afficher le tableau
+kable(tableau_projete, caption = "Résultats des distributions pour chaque portefeuille")
+```
+
+## Discution sur les incertitudes des estimations obtenues
+
+### Méthode mathématiques
+
+Cette méthode est limitée par le nombres d'années considérées. En effet,
+nous ne pouvons être sûrs des estimateurs des lois de fréquences et de
+coûts, car le manque d'années disponibles fait que nous avons des
+variations annuelles parfois très fortes sur nos paramètres. Ces
+variations, et les choix que nous avons fait pour retraiter les données
+lors de la projections des paramètres pour l'année 2024, font que cette
+méthode semble inadaptée pour obtenir une modélisation précise des
+statistiques demandée.
+
+### Méthode de Monte-Carlo sans projection et retraitement
+
+L'incertitude concernant l'estimation des paramètres qui modélisent les
+différentes lois de fréquence et de coût est contrôlée par les
+intervalles de confiance lors de la partie précédente. En effet, un
+échantillon de 100 000 polices est suffisant pour de telles estimations.
+
+Les variations inhérentes aux lois que nous modélisons et simulons
+reflètent plutôt bien les données historiques. Cependant, cette méthode
+est limitée par le nombre restreint d'années considérées et les
+événements spéciaux qui peuvent survenir en termes de fréquences et de
+coûts au cours d'une année donnée.
+
+Néanmoins, les simulations nous permettent de constater que chaque
+portefeuille a ses spécificités : une espérance de sinistralité plus
+élevée, une variance plus élevée, une VaR à 1 % plus élevée, etc. Par
+conséquent, chaque portefeuille doit être traité de manière spécifique.
+
+Nos estimations restent limitées avec cette méthode car elle ne tient
+pas compte des tendances des portefeuilles, telles qu'une augmentation
+constante de la fréquence au cours des cinq dernières années ou une
+augmentation moyenne des coûts sur la même période. Cela peut poser
+problème lorsqu'il s'agit de projeter la sinistralité pour les futurs
+exercices, car il existe un risque de sous-estimation, en particulier
+pour la plupart des portefeuilles.
+
+### Méthode bootstrap - historique
+
+La méthode historique nous permet d'éviter de faire des hypothèses sur
+un éventuel modèle paramétrique afin de simuler la charge sinistre en
+fonction des années précédentes. L'utilisation du bootstrap nous permet
+d'introduire de l'incertitude en tirant parti des lois de fréquence et
+de coût de chaque année. Cet avantage a toutefois un coût : la méthode
+bootstrap ne nous permet généralement pas de limiter les variations, et
+en outre, elle substitue la distribution de la population par celle de
+l'échantillon, ce qui peut biaiser nos résultats. Ainsi, par exemple,
+nous observons comme s'il y avait deux distributions pour le
+portefeuille C, l'une autour de 3 millions et l'autre autour de 6
+millions. Malgré cela, cette méthode nous permet de mieux appréhender
+les variations potentielles inhérentes aux portefeuilles.
+
+### Méthode de Monte-Carlo avec projection et retraitement
+
+La méthode de Monte Carlo, associée à l'utilisation des projections des
+paramètres pour chaque année, permet de mieux refléter les tendances
+observées dans chaque portefeuille. Les distributions obtenues semblent
+converger vers une loi normale. La projection et le retraitement
+permettent de déterminer le scénario qui, selon nos analyses, est le
+plus probable.
+
+L'incertitude concernant les paramètres utilisés pour la fréquence est
+contrôlée par les différents intervalles de confiance que nous avons
+définis dans la première partie sur la loi de fréquence. Néanmoins,
+l'incertitude sur ces paramètres reste non contrôlée dans les
+projections que nous avons réalisées, même si la qualité des projections
+est surveillée avec une erreur standard relativement faible.
+
+L'incertitude sur les paramètres projetés pour la loi de coût est
+limitée par la qualité de la régression utilisée ; les différents
+paramètres sont plutôt bien projetés. Cependant, tout comme pour la loi
+de fréquence, nous ne pouvons pas être sûrs des projections sans une
+connaissance approfondie des caractéristiques des produits sous-jacents
+et des tendances qui peuvent être expliquées par des facteurs concrets,
+tels qu'une année exceptionnelle ou l'inflation sur les produits
+sous-jacents.
+
+# Estimations sur la somme des charges de sinistres des 4 portefeuilles
+
+La distribution conjointe de $S$ représente la probabilité que la somme
+des charges totales ($S$) sur tous les portefeuilles prenne une certaine
+valeur. C'est une distribution qui tient compte de la dépendance entre
+les portefeuilles A, B, C et D.
+
+Les modèles de copules sont des outils statistiques permettant de
+modéliser cette dépendance. Une copule permet de séparer la structure de
+dépendance marginale des distributions marginales. En d'autres termes,
+elle capture comment les événements (charges totales sur chaque
+portefeuille) sont liés entre eux, indépendamment de leurs distributions
+marginales.
+
+Par exemple, si les sinistres sur les différents portefeuilles sont plus
+susceptibles de se produire simultanément plutôt que de manière
+indépendante, une copule peut capturer cette corrélation, on aurait ici
+potentiellement une dépendance co-monotone.
+
+En utilisant ces modèles, on pourrait estimer la fonction de densité
+conjointe de $S$, ce qui permettrait de caractériser la variabilité de
+la somme des charges totales sur tous les portefeuilles. Cela peut être
+particulièrement utile pour comprendre les scénarios extrêmes et évaluer
+les risques associés à la charge totale.
+
+En utilisant la copule de $S$, nous avons les formules suivantes :
+
+$$\mathbb{E}(S)=\sum_{i\in\{A,B,C,D\}}\mathbb{E}(S_{i})$$
+$$\mathbb{V}(S)=\sum_{i\in\{A,B,C,D\}}\mathbb{V}(S_{i})-\sum_{\overset{(i,j)\in\{A,B,C,D\}^{2}}{i\ne j}}\mathbb{C}(S_{i},S_{j})$$
+$$VaR_{1\%}(S)=F^{[-1]}_{S}(0,01)$$ avec $F_{S}$ la fonction quantile
+inverse de la distribution de $S$.
+
+Pour mesurer l'ensemble de ces variables (à l'exception de l'espérance),
+mais également pour connaitre la loi de $S$, il faudrait que l'on
+connaisse le niveau de dépendance des quatre portefeuilles, ainsi que
+les covariances entre les différents portefeuilles. Or, nous ne
+disposons pas de ces informations dans les données qui nous sont
+fournies. Nous ne pouvons donc pas calculer ces quantités.
+
+# Sources
+
+-   Cours de Théorie du risque, Jean Berard
+
+-   Cours de Modélisation statistique avancée, Etienne Birmelé
+
+-   Cours de Modèles de durée, Pierre-Olivier Goffard
+
+-   Fiche d'exercices corrigés du cours de Probabilités (S1 du master
+    d'actuariat), Jean Berard
+
+-   TP1 : Calculs dans le modèle collectif (Cours de Théorie des
+    risques), Jean Berard
+
+-   [Bibm\@th](mailto:Bibm@th){.email} :
+    <https://www.bibmath.net/dico/index.php?action=affiche&quoi=./w/wald.html>
+
+# Annexe
+
+## Théorème de Wald
+
+### Enoncé {.unnumbered}
+
+Soit $\left(X_{n}\right)$ une suite de variables aléatoires de même loi,
+et $N$ une variable aléatoire à valeurs entières. On suppose que :
+
+-   $X_{1}$ et $N$ sont intégrables ;
+
+-   Les variables aléatoires $N,X_{1},...,X_{n},...$ sont mutuellement
+    indépendantes.
+
+Alors :
+$$\mathbb{E}\left(\sum_{n=1}^{N} X_{n}\right)=\mathbb{E}(N)\times \mathbb{E}(X_{1})$$
+
+## Preuve {.unnumbered}
+
+Posons $S_{n}=\sum_{i=1}^{n} X_{i}$, et cherchons à exprimer l'espérance
+de $S_{N}$ en fonction des espérances de $X_{1}$ et $N$.
+
+Nous pouvons écrire : $$
+\mathbb{E}(S_{N})=\mathbb{E}\left(\mathbb{E}(S_{N}|N)\right)
+$$
+
+Nous avons, avec $n\in\mathbb{r}$ :
+
+$$
+\begin{align*}
+\mathbb{E}(S_{N}|N=n) &= \frac{\mathbb{E}(S_{N}\times\mathbb{1}(N=n))}{\mathbb{P}(N=n)}\\
+&= \frac{\mathbb{E}(S_{n}\times\mathbb{1}(N=n))}{\mathbb{P}(N=n)}\\
+&\overset{(1)}{=} \frac{\mathbb{E}(S_{n})\mathbb{P}(N=n)}{\mathbb{P}(N=n)}\\
+&= \mathbb{E}(S_{n})\\
+&\overset{(2)}{=} \sum_{i=1}^{n}\mathbb{E}(X_{i})\\
+&\overset{(3)}{=} n\mathbb{E}(X_{1})
+\end{align*}
+$$
+
+En utilisant :
+
+```{=tex}
+\begin{itemize}
+    \item[(1)] le fait que la variable aléatoire \(N\) est indépendante de la suite \((x_{i})_{i\ge 1}\), donc que \(N\) est indépendante de \(S_{n}\)
+    \item[(2)] la linéarité de l'espérance
+    \item[(3)] le fait que, pour tout \(i\), \(\mathbb{E}(X_{i})=\mathbb{E}(X_{1})\)
+\end{itemize}
+```
+Nous pouvons donc écrire que : $$
+\mathbb{E}(S_{N}|N)=N\times\mathbb{E}(S_{N})
+$$
+
+Donc :
+
+$$\begin{align*}
+\mathbb{E}(S_{N}) &= \mathbb{E}\left(\mathbb{E}(S_{N}|N)\right)\\
+&= \mathbb{E}\left(N\times \mathbb{E}(X_{1})\right)\\
+&= \mathbb{E}(X_{1})\mathbb{E}(N)
+\end{align*}$$
+
 
